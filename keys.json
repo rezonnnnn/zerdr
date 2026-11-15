@@ -1,0 +1,10 @@
+{
+  "layout:Zerdr": {
+    "ctrl-shift-t": "mod.open:zerdr-new-thread",
+    "ctrl-shift-b": "zerdr-viz.toggle",
+    "ctrl-tab": "zerdr-sidebar.next",
+    "ctrl-shift-tab": "zerdr-sidebar.prev",
+    "alt-]": "zerdr-sidebar.next",
+    "alt-[": "zerdr-sidebar.prev"
+  }
+}

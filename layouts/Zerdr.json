@@ -1,0 +1,205 @@
+{
+  "id": "root",
+  "type": "row",
+  "children": [
+    {
+      "id": "sidebar",
+      "type": "column",
+      "children": [
+        {
+          "id": "viz",
+          "type": "block",
+          "content": {
+            "mod": "zerdr-viz"
+          },
+          "size": {
+            "px": 60
+          },
+          "window_drag": true
+        },
+        {
+          "id": "threads",
+          "type": "block",
+          "content": {
+            "mod": "zerdr-sidebar"
+          },
+          "size": {
+            "px": 200
+          },
+          "min": 60
+        },
+        {
+          "id": "agents",
+          "type": "block",
+          "content": {
+            "mod": "zerdr-agents",
+            "props": {
+              "part": "list"
+            }
+          },
+          "size": {
+            "px": 150
+          },
+          "min": 60
+        },
+        {
+          "id": "sidebar-fill",
+          "type": "column",
+          "children": [],
+          "size": {
+            "weight": 1
+          }
+        },
+        {
+          "id": "sidebar-foot",
+          "type": "block",
+          "content": {
+            "mod": "zerdr-agents",
+            "props": {
+              "part": "footer"
+            }
+          },
+          "size": {
+            "px": 84
+          }
+        }
+      ],
+      "size": {
+        "px": 272
+      },
+      "min": 44,
+      "max": 480,
+      "background": "chrome",
+      "resizable": false
+    },
+    {
+      "id": "work",
+      "type": "column",
+      "children": [
+        {
+          "id": "header",
+          "type": "block",
+          "content": {
+            "mod": "zerdr-header"
+          },
+          "size": {
+            "px": 60
+          },
+          "window_drag": true
+        },
+        {
+          "id": "work-body",
+          "type": "row",
+          "children": [
+            {
+              "id": "main",
+              "type": "block",
+              "content": {
+                "tab": "active",
+                "pane": {
+                  "background": "background",
+                  "border": {
+                    "width": 1,
+                    "color": "#ffffff0a"
+                  },
+                  "focus": {
+                    "width": 1,
+                    "color": "#ffffff14"
+                  },
+                  "radius": 12,
+                  "gap": 8,
+                  "lone": true
+                }
+              }
+            },
+            {
+              "id": "panel",
+              "type": "column",
+              "children": [
+                {
+                  "id": "panel-body",
+                  "type": "stack",
+                  "children": [
+                    {
+                      "id": "files",
+                      "type": "block",
+                      "content": {
+                        "mod": "zerdr-files"
+                      }
+                    },
+                    {
+                      "id": "changes",
+                      "type": "block",
+                      "content": {
+                        "mod": "zerdr-changes"
+                      }
+                    }
+                  ],
+                  "active": "files"
+                }
+              ],
+              "size": {
+                "px": 340
+              },
+              "min": 280,
+              "max": 900,
+              "hidden": true
+            }
+          ],
+          "padding": [
+            8,
+            12
+          ],
+          "gap": 12
+        }
+      ],
+      "resizable": false
+    }
+  ],
+  "background": "canvas",
+  "theme": "ink",
+  "colors": {
+    "ansi0": "#000000",
+    "ansi1": "#cd3131",
+    "ansi2": "#0dbc79",
+    "ansi3": "#e5e510",
+    "ansi4": "#2472c8",
+    "ansi5": "#bc3fbc",
+    "ansi6": "#11a8cd",
+    "ansi7": "#e5e5e5",
+    "ansi8": "#666666",
+    "ansi9": "#f14c4c",
+    "ansi10": "#23d18b",
+    "ansi11": "#f5f543",
+    "ansi12": "#3b8eea",
+    "ansi13": "#d670d6",
+    "ansi14": "#29b8db",
+    "ansi15": "#ffffff",
+    "chrome": "#141416",
+    "canvas": "#000000",
+    "raised": "#151a21",
+    "selected": "#1d242d",
+    "border": "#23262c",
+    "input": "#3a3a3f",
+    "foreground": "#eeeeef",
+    "muted": "#b4b7bd",
+    "dim": "#8a8f98",
+    "accent": "#06b6d4",
+    "working": "#14b8a6",
+    "blocked": "#f5b83d",
+    "done": "#d1d1d6",
+    "idle": "#6e6e73",
+    "background": "#000000"
+  },
+  "terminal_padding": [
+    14,
+    12
+  ],
+  "titlebar": "none",
+  "traffic_lights": [
+    12,
+    16
+  ],
+  "ui_font": "Inter",
+  "preview": "layouts/Zerdr.png"
+}
