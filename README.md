@@ -1,6 +1,6 @@
 # Zerdr
 
-**OEM plus for [Herdr](https://herdr.dev), threads style.** This is stock Herdr refined, not reinvented. Every tab is a thread. The sidebar groups threads by machine and project, shows the agents working right now as cards, and a slow gradient at the top tells you how everything is going at a glance. The terminal sits alone in a quiet rounded card.
+**A threads layout for [Herdr](https://herdr.dev).** Every tab is a thread. The sidebar groups threads by machine and project, shows the agents working right now as cards, and a slow gradient at the top tells you how everything is going at a glance. The terminal sits alone in a quiet rounded card.
 
 ![Zerdr](preview.png)
 
@@ -35,7 +35,6 @@ Web links in Markdown previews open in your browser. [RECIPE.md](RECIPE.md) has 
 
 ## Credits
 
-- Built on Herdr's shipped mods and icons. `zerdr-files` and `zerdr-changes` started as clones of Herdr's `files` and `changes`.
 - [Inter](https://rsms.me/inter/) by Rasmus Andersson, SIL Open Font License 1.1 (see `mods/zerdr-sidebar/fonts/LICENSE-Inter.txt`).
 
 ## License
