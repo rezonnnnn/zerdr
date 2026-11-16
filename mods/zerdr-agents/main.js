@@ -43,8 +43,13 @@ const narrow = () => (find(layout(), "sidebar")?.size?.px ?? Infinity) < 160;
 // frame hidden at the new width) -> idle (fade in, 180 ms). Native transitions only.
 const settle = (el) => {
   const p = shared("sidebar.phase") ?? "idle";
-  const spec = p === "idle" ? { duration: 180, easing: "ease-out" } : p === "leaving" ? { duration: 120, easing: "ease-in" } : 1;
-  return el.relative().left(p === "idle" ? 0 : -12).opacity(p === "idle" ? 1 : 0).transition("left", spec).transition("opacity", spec);
+  // Slide (2026-11-16): content travels its full width (leaving 200 ms ease-in, idle 260 ms ease-out);
+  // the layout still resizes once per toggle, so the terminal reflows once.
+  const spec = p === "idle" ? { duration: 260, easing: "ease-out" } : p === "leaving" ? { duration: 200, easing: "ease-in" } : 1;
+  const off = -(shared("sidebar.width") ?? 272);
+  // The offset must sit on a child: Herdr places a mod's root element itself and ignores its left.
+  return div().id("settle").size_full().overflow_hidden().child(el.relative().left(p === "idle" ? 0 : off)
+    .opacity(p === "idle" ? 1 : 0).transition("left", spec).transition("opacity", spec));
 };
 
 // A sub-agent's raw word; error counts as needing you, done reports to its parent.
@@ -199,7 +204,7 @@ export default class ThreadsAgents extends View {
   marker(t, status, key) {
     const box = (el) => div().size(16).flex_none().flex().items_center().justify_center().child(el);
     // Working, or waiting on sub-agents or background shells: one braille spinner (native frames).
-    if (status === "working" || status === "agents") return box(div().id(`mk-wk-${key}`).text_size(15).text_color(t.working).frames(BRAILLE, 80));
+        if (status === "working" || status === "agents") return box(div().id(`mk-wk-${key}`).text_size(15).text_color(t.working).frames(BRAILLE, 80));
     if (status === "blocked") return box(div().size(13).rounded_full().bg(t.blocked + "38").flex().items_center().justify_center()
       .child(div().size(7).rounded_full().bg(t.blocked)));
     if (status === "done") return box(svg(`${ICONS}/circle-check.svg`).size(14).text_color(DONE));
@@ -278,22 +283,26 @@ export default class ThreadsAgents extends View {
     const machine = r.space.machine;
     // The shown thread is highlighted here as in the threads list, so switching moves it between them.
     const on = r.tabId === focused()?.tab;
+    // Dim: a working thread recedes (muted title, faded line 2); brightness is kept for threads that need you.
+    const busy = ["working", "agents"].includes(r.phase ?? r.status);
     return this.slide.apply(div().id(`ag-${r.key}`), r.key).relative().flex_none().px(8).py(6).rounded(8).cursor_pointer()
       .when(!on, (el) => el.hover((s) => s.bg("#FFFFFF08")))
       .tooltip([r.name, `${machine ?? "This computer"} / ${r.space.name}`, "Focus"].join("\n"))
       .on_click(() => r.click())
       // The state marker sits top right, on the title line; text starts flush left like the threads list.
       .child(h_flex().gap(8).items_center()
-        .child(v_flex().flex_1().min_w(0).gap(2)
+        // t3code card, as zerdr-sidebar: machine › project and time worked on top, title and spinner below.
+        .child(v_flex().flex_1().min_w(0).gap(4)
+          .child(h_flex().gap(8).items_center().min_w(0).h(16).text_size(12).text_color(t.dim).opacity(busy ? 0.6 : 1)
+            .child(h_flex().flex_1().min_w(0).gap(5).items_center()
+              .child(svg(`${ICONS}/${machine ? "server" : "monitor"}.svg`).size(12).flex_none())
+              .child(div().flex_none().child(machine ?? "Local"))
+              .child(div().flex_none().text_color(t.idle).child("›"))
+              .child(div().min_w(0).truncate().text_color(t.muted).child(r.space.name)))
+            .child(div().flex_none().tooltip("Time worked").child(worked)))
           .child(h_flex().gap(8).items_center().min_w(0)
-            .child(div().flex_1().min_w(0).truncate().text_size(13).font_semibold().text_color(t.foreground).child(r.name))
-            .child(div().flex_none().child(this.marker(t, r.phase ?? r.status, r.key))))
-          // Harness icon, then the project (a remote thread names its machine), then time worked.
-          .child(h_flex().gap(6).items_center().min_w(0).text_color(t.dim)
-            .when(Boolean(progIcon(r.program, 12)), (el) => el.child(div().flex_none().tooltip(r.program?.name ?? "").child(progIcon(r.program, 12))))
-            .when(Boolean(machine), (el) => el.child(svg(`${ICONS}/server.svg`).size(12).flex_none()))
-            .child(div().flex_1().min_w(0).truncate().text_size(12).child(machine ? `${machine} · ${r.space.name}` : r.space.name))
-            .child(duration(t, worked).tooltip("Time worked")))));
+            .child(div().flex_1().min_w(0).truncate().text_size(13).font_medium().text_color(busy ? t.muted : t.foreground).child(r.name))
+            .child(div().flex_none().child(this.marker(t, r.phase ?? r.status, r.key))))));
   }
 
   row(t, r) {

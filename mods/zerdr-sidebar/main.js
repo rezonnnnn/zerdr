@@ -12,6 +12,8 @@ import { Press } from "./press.js";
 const TILE = "#151517"; // program badge tile: no token is this dark
 // Marker colour with no theme token: all work done (green).
 const DONE = "#22c55e";
+// Needs-you dot (red): no theme token is a plain red.
+const NEEDS = "#ef4444";
 const ICONS = "mods/workspace-chrome";
 // Dock sizing (fit): search row (mt 8 + 32 + mb 6), list padding (pt 4 + pb 8), floor, header.
 const HEAD_PX = 46, LIST_PAD = 12, MIN_PX = 60, VIZ_PX = 96;
@@ -34,8 +36,13 @@ const narrow = () => (find(layout(), "sidebar")?.size?.px ?? Infinity) < 160;
 // frame hidden at the new width) -> idle (fade in, 180 ms). Native transitions only.
 const settle = (el) => {
   const p = shared("sidebar.phase") ?? "idle";
-  const spec = p === "idle" ? { duration: 180, easing: "ease-out" } : p === "leaving" ? { duration: 120, easing: "ease-in" } : 1;
-  return el.relative().left(p === "idle" ? 0 : -12).opacity(p === "idle" ? 1 : 0).transition("left", spec).transition("opacity", spec);
+  // Slide (2026-11-16): content travels its full width (leaving 200 ms ease-in, idle 260 ms ease-out);
+  // the layout still resizes once per toggle, so the terminal reflows once.
+  const spec = p === "idle" ? { duration: 260, easing: "ease-out" } : p === "leaving" ? { duration: 200, easing: "ease-in" } : 1;
+  const off = -(shared("sidebar.width") ?? 272);
+  // The offset must sit on a child: Herdr places a mod's root element itself and ignores its left.
+  return div().id("settle").size_full().overflow_hidden().child(el.relative().left(p === "idle" ? 0 : off)
+    .opacity(p === "idle" ? 1 : 0).transition("left", spec).transition("opacity", spec));
 };
 
 const clean = (s) => (s ?? "").replace(/^[^\p{L}\p{N}]+/u, "").trim();
@@ -95,6 +102,14 @@ const progIcon = (prog, size) => !prog?.icon ? null
   : (prog.tint ? svg(prog.icon).text_color(prog.color ?? theme().muted) : image(prog.icon)).size(size).flex_none();
 const duration = (t, text) => h_flex().flex_none().gap(4).items_center().text_size(12).text_color(t.dim)
   .child(svg(TIMER).size(12).flex_none()).child(text);
+// Card breadcrumb, shared with zerdr-agents (keep the two in step): machine icon and name
+// (dim), a dark chevron, the project (muted). The thread title is the card's first line.
+const crumb = (t, machine, project) => h_flex().flex_1().min_w(0).gap(5).items_center().text_size(12)
+  .tooltip(`${machine ?? "Local"} / ${project}`)
+  .child(svg(`${ICONS}/${machine ? "server" : "monitor"}.svg`).size(12).flex_none().text_color(t.dim))
+  .child(div().flex_none().text_color(t.dim).child(machine ?? "Local"))
+  .child(div().flex_none().text_color(t.idle).child("›"))
+  .child(div().min_w(0).truncate().text_color(t.muted).child(project));
 const fmtWorked = (ms) => {
   const m = Math.floor(ms / 60000);
   if (m < 1) return "<1m";
@@ -207,8 +222,9 @@ export default class ThreadsSidebar extends View {
     this.glide = new Glide(1); // the Agents panel is below
     try { this.folded = new Set(JSON.parse(localStorage.getItem("folded") ?? "[]")); } catch { this.folded = new Set(); }
     this.archivedOpen = localStorage.getItem("archivedOpen") === "1";
+    // Needs-you threads already looked at: { tab: changed_at when seen }. A new ask (changed_at moves) shows the dot again.
+    try { this.seenAsk = JSON.parse(localStorage.getItem("seenAsk") ?? "{}") ?? {}; } catch { this.seenAsk = {}; }
     try { this.worked = JSON.parse(localStorage.getItem("worked") ?? "{}") ?? {}; } catch { this.worked = {}; }
-    try { this.autoNames = JSON.parse(localStorage.getItem("autoNames") ?? "{}") ?? {}; } catch { this.autoNames = {}; }
     this.workedShared = false;
     // Worked times only change by the minute; the saved totals follow.
     cx.timer.every(60000, (cx) => { localStorage.setItem("worked", JSON.stringify(this.worked)); cx.notify(); });
@@ -269,24 +285,9 @@ export default class ThreadsSidebar extends View {
     }
   }
 
-  // Herdr's own notifications read "<space> / <tab name>", so each tab is named after its
-  // session's live title (the lead agent's terminal title) and the title reaches every toast.
-  // Only unnamed tabs and tabs named here are touched: a name the person gave (F2) sticks.
-  syncNames() {
-    const allPanes = panes();
-    let changed = false;
-    for (const tab of spaces().flatMap((sp) => sp.tabs)) {
-      if (tab.named && tab.name !== this.autoNames[tab.id]) continue;
-      const mine = allPanes.filter((p) => p.tab === tab.id && p.terminal);
-      const lead = mine.find((p) => p.program?.agent) ?? mine.find((p) => p.focused) ?? mine[0];
-      const live = telling(lead?.title, lead?.program);
-      if (!live || live === tab.name) continue;
-      this.autoNames[tab.id] = live;
-      changed = true;
-      run("tab.rename", { id: tab.id, name: live });
-    }
-    if (changed) localStorage.setItem("autoNames", JSON.stringify(this.autoNames));
-  }
+  // Tab names: Herdr (0.1.16+) names each tab after its agent's session title itself. This mod
+  // used to do it with tab.rename on every render, but tab.rename takes the keyboard from any
+  // open dialog (New thread went keyboard-dead while agents worked), so it is left to Herdr.
 
   clearSearch(cx) {
     this.input.set_value("");
@@ -452,32 +453,41 @@ export default class ThreadsSidebar extends View {
     const unseen = tab.status === "done";
     const where = `${space.machine ?? "This computer"} / ${space.name}`;
     const done = () => { this.hovered = null; };
-    // No leading column: the title starts on the 16px edge and gets the width. State is carried by
-    // line 2's colour (needs you: amber "Needs you"; unseen: accent time, with a semibold title).
+    // No leading column: the title starts on the 16px edge and gets the width. Line 2 is the harness
+    // icon and time worked, no words. State is one dot at the top right, cleared once the thread is
+    // looked at: teal = finished and not opened yet (Herdr's "done"), red = needs you, not yet seen.
     const pic = progIcon(d.program, 12);
     const ms = workedMs(this.worked[tab.id]);
-    const when = d.phase === "blocked" ? "Needs you" : ms ? fmtAgo(tab.changed_at) : "Not started";
-    const whenColor = d.phase === "blocked" ? t.blocked : unseen ? t.accent : t.dim;
+    const ask = d.phase === "blocked" && this.seenAsk[tab.id] !== (tab.changed_at ?? 0);
+    // Read threads keep a faint dot (slow 1.2 s fade): red while it still needs you, teal once done.
+    const dot = d.phase === "blocked" ? NEEDS : d.phase === "done" && (ms > 0 || unseen) ? t.working : null;
+    const fresh = ask || unseen;
+    const tip = d.phase === "blocked" ? `Needs you · ${fmtAgo(tab.changed_at)}` : ms ? `Last active ${fmtAgo(tab.changed_at)}` : "Not started";
     return this.slide.apply(div().id(`th-${tab.id}`), tab.id).relative().flex_none().my(2).px(8).py(6).rounded(8)
       .flex().items_start().gap(8).cursor_pointer()
       .when(!on, (el) => el.hover((s) => s.bg("#FFFFFF08")))
-      .tooltip([d.title, where, PHASE_TIP[d.phase]].filter(Boolean).join("\n"))
+      .tooltip([d.title, where, PHASE_TIP[d.phase], tip].filter(Boolean).join("\n"))
       .on_hover((h, cx) => {
         if (h) this.hovered = tab.id;
         else if (this.hovered === tab.id) this.hovered = null;
         cx.notify();
       })
       .on_click(() => this.select(space, tab))
-      .child(v_flex().flex_1().min_w(0).gap(2)
-        .child(div().min_w(0).truncate().text_size(13).text_color(t.foreground)
-          .when(unseen, (el) => el.font_semibold())
-          .when(!unseen, (el) => el.font_medium())
-          .child(d.title))
-        .child(h_flex().min_w(0).gap(6).items_center()
-          .when(Boolean(pic), (el) => el.child(div().flex_none().tooltip(d.program?.name ?? "").child(pic)))
-          .child(div().flex_1().min_w(0).truncate().text_size(12).text_color(whenColor)
-            .tooltip(d.phase === "blocked" ? "Waiting for you" : unseen ? "Finished · not opened yet" : "Last active").child(when))
-          .when(ms > 0 && !hover, (el) => el.child(duration(t, fmtWorked(ms)).tooltip("Time worked")))))
+      // t3code card: context line on top (machine › project, time worked at the right), then the
+      // title with the state dot at its right.
+      .child(v_flex().flex_1().min_w(0).gap(4)
+        .child(h_flex().min_w(0).gap(8).items_center().h(16)
+          .child(crumb(t, space.machine, space.name))
+          .when(ms > 0 && !hover, (el) => el.child(div().flex_none().text_size(12).text_color(t.dim).tooltip("Time worked").child(fmtWorked(ms)))))
+        .child(h_flex().min_w(0).gap(8).items_center()
+          .child(div().flex_1().min_w(0).truncate().text_size(13).text_color(t.foreground)
+            .when(fresh, (el) => el.font_semibold())
+            .when(!fresh, (el) => el.font_medium())
+            .child(d.title))
+          .when(Boolean(dot) && !hover, (el) => el.child(div().size(16).flex_none().flex().items_center().justify_center()
+            .tooltip(d.phase === "blocked" ? (ask ? "Needs you" : "Needs you · seen") : unseen ? "Finished · not opened yet" : "Finished · seen")
+            .child(div().id(`dot-${tab.id}`).size(8).rounded_full().bg(dot).opacity(fresh ? 1 : 0.3)
+              .transition("opacity", { duration: 1200, easing: "ease-out" }))))))
       // Hover shows Rename and Archive (or Unarchive, for an archived thread) at the right, centred on the row.
       .when(hover && Boolean(tab.settled), (el) => el.child(h_flex().flex_none().self_center()
         .child(this.ibtn(`unarc-${tab.id}`, "archive", "Unarchive", 22, (cx) => { run("tab.unsettle", { id: tab.id }); done(); cx.notify(); }).bg(t.raised))))
@@ -501,8 +511,12 @@ export default class ThreadsSidebar extends View {
   body(cx) {
     const t = theme();
     this.track();
-    this.syncNames();
     const shownTab = focused()?.tab ?? null;
+    const shownT = shownTab && spaces().flatMap((sp) => sp.tabs).find((x) => x.id === shownTab);
+    if (shownT?.status === "blocked" && this.seenAsk[shownTab] !== (shownT.changed_at ?? 0)) {
+      this.seenAsk[shownTab] = shownT.changed_at ?? 0;
+      localStorage.setItem("seenAsk", JSON.stringify(this.seenAsk));
+    }
     const q = this.q;
     const { done, archived, order, nav } = this.model();
 
