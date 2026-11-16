@@ -1,4 +1,4 @@
-// Sidebar header: a drifting mesh gradient (decorative; it follows the
+// Sidebar header: the portfolio hero's drifting mesh gradient (decorative; it follows the
 // aggregate thread status from herdr), plus the sidebar toggle.
 
 import { View, div, svg, image } from "gpui-kit";
@@ -23,8 +23,13 @@ const narrow = () => (find(layout(), "sidebar")?.size?.px ?? Infinity) < 160;
 // frame hidden at the new width) -> idle (fade in, 180 ms). Native transitions only.
 const settle = (el) => {
   const p = shared("sidebar.phase") ?? "idle";
-  const spec = p === "idle" ? { duration: 180, easing: "ease-out" } : p === "leaving" ? { duration: 120, easing: "ease-in" } : 1;
-  return el.relative().left(p === "idle" ? 0 : -12).opacity(p === "idle" ? 1 : 0).transition("left", spec).transition("opacity", spec);
+  // Slide (2026-11-16): content travels its full width (leaving 200 ms ease-in, idle 260 ms ease-out);
+  // the layout still resizes once per toggle, so the terminal reflows once.
+  const spec = p === "idle" ? { duration: 260, easing: "ease-out" } : p === "leaving" ? { duration: 200, easing: "ease-in" } : 1;
+  const off = -(shared("sidebar.width") ?? 272);
+  // The offset must sit on a child: Herdr places a mod's root element itself and ignores its left.
+  return div().id("settle").size_full().overflow_hidden().child(el.relative().left(p === "idle" ? 0 : off)
+    .opacity(p === "idle" ? 1 : 0).transition("left", spec).transition("opacity", spec));
 };
 // Collapse/expand: one layout.resize per toggle, so the terminal reflows once. Stepping the width
 // (the old 200 ms slide) resized the terminal ~12 times and the agent in it redrew per step: lag.
@@ -45,7 +50,7 @@ function toggleSidebar(cx) {
     run("layout.resize", { id: "sidebar", px: to });
     cx.timer.after(16, () => { setShared("sidebar.phase", "idle"); busy = false; });
   };
-  if (collapsing) { setShared("sidebar.phase", "leaving"); cx.timer.after(120, swap); }
+  if (collapsing) { setShared("sidebar.phase", "leaving"); cx.timer.after(200, swap); }
   else swap(cx);
 }
 
@@ -55,9 +60,9 @@ export default class ThreadsViz extends View {
     cx.spawn(async (cx) => { for (;;) { if ((await nextCommand()) === "toggle") toggleSidebar(cx); } });
   }
 
-  // A mesh gradient at the sidebar-header scale (60px, the zerdr-header's height so the toggle centres on its icon row). There is one soft blob per
-  // colour (art/blob-*.png), each drifting on its own path, over a
-  // mid blue. Grain sits on top, then fade(): chrome bands with an alpha ramp, so the art
+  // The portfolio hero's mesh gradient at the sidebar-header scale (60px, the thread-header's height so the toggle centres on its icon row). There is one soft blob per
+  // hero colour (art/blob-*.png, from gen_blobs.py), each drifting on its own path, over the
+  // hero's mid blue. Grain sits on top, then art/fade.png: chrome with the prototype's alpha ramp, so the art
   // thins out towards the search box (herdr has no CSS mask; chrome over art is the same picture).
   // The header follows the aggregate thread state. It drifts at half speed when nothing is working,
   // and an amber layer fades in when a thread needs you. The ids are keyed by state, so the loops
@@ -86,7 +91,7 @@ export default class ThreadsViz extends View {
       .child(this.fade());
   }
 
-  // The mask ramp as chrome bands over the art: alpha = 1 - mask, 2px rows, solid
+  // The prototype's mask ramp as chrome bands over the art: alpha = 1 - mask, 2px rows, solid
   // from 30% down. An image overlay can't do this: herdr keeps image aspect, so it won't stretch to the width.
   fade() {
     const stops = [[0, 1], [0.3, 1], [0.45, 0.85], [0.6, 0.62], [0.74, 0.38], [0.87, 0.17], [0.95, 0.05], [1, 0]];
@@ -117,7 +122,7 @@ export default class ThreadsViz extends View {
     const blocked = open.some((x) => x.status === "blocked");
     const mode = open.some((x) => x.status === "working") ? "active" : "idle";
     const collapsed = narrow();
-    // The one solid 28px button: frosted chrome over the gradient.
+    // The one solid 28px button: black, as the site's corner buttons over its hero.
     const toggle = this.press.wire(div().id("threads-toggle").size(28).flex_none().flex().items_center().justify_center().rounded_full()
       // Frosted: translucent chrome with a hairline ring and a soft drop, over the mesh.
       .bg(t.chrome.slice(0, 7) + "99").border(1).border_color("#FFFFFF1F").shadow_sm().text_color("#FFFFFFE6").cursor_pointer()
