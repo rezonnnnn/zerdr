@@ -1,5 +1,5 @@
 // Thread header for the Zerdr layout: 60 px, inside a `window_drag` block.
-// Left: breadcrumb machine / project / thread (t3code style; the thread title click: tab.rename), then its worktree crumb (branch icon + branch,
+// Left: breadcrumb machine / project / thread (the thread title click: tab.rename), then its worktree crumb (branch icon + branch,
 // or the worktree folder name), sharing a baseline. Right: five round icon buttons (Files,
 // Changes, Split, Archive, Commands), a divider, then window buttons where the system draws none.
 // No status chip or live text.

@@ -1,4 +1,4 @@
-// Threads list, grouped as the macOS sidebar groups locations: machine (this computer first, then
+// Threads list, grouped by machine (this computer first, then
 // remotes by name), then project (space order), then one-line thread rows (needs-you first, then
 // newest). A project header folds its threads. Working threads show in zerdr-agents.
 // Archive = tab.settle; archived threads sit in a folded "Archived" section at the bottom.
@@ -369,7 +369,7 @@ export default class ThreadsSidebar extends View {
     return tile.text_size(9).font_bold().text_color(t.dim).child(prog?.shell ? "$" : (prog?.name ?? "?").slice(0, 1).toUpperCase());
   }
 
-  // Header action, as t3code: bare icon, dim until hovered; `on` tints it (an active filter).
+  // Header action: bare icon, dim until hovered; `on` tints it (an active filter).
   hbtn(id, icon, tip, on, onClick) {
     const t = theme();
     return this.press.wire(div().id(id).size(24).flex_none().flex().items_center().justify_center().rounded(6)
@@ -473,7 +473,7 @@ export default class ThreadsSidebar extends View {
         cx.notify();
       })
       .on_click(() => this.select(space, tab))
-      // t3code card: context line on top (machine › project, time worked at the right), then the
+      // Two-line card: context line on top (machine › project, time worked at the right), then the
       // title with the state dot at its right.
       .child(v_flex().flex_1().min_w(0).gap(4)
         .child(h_flex().min_w(0).gap(8).items_center().h(16)
@@ -563,7 +563,7 @@ export default class ThreadsSidebar extends View {
           .on_click((_e, cx) => { this.needsOnly = false; this.clearSearch(cx); }).child(this.needsOnly ? "Show all" : "Clear search")));
     }
 
-    // t3code header: flat search, then filter / new project (a space) / new thread.
+    // Header: flat search, then filter / new project (a space) / new thread.
     const search = h_flex().id("search").relative().h(32).gap(8).items_center()
       .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
       .on_key_down((e, cx) => { if (e.key === "escape" && this.q) { cx.stop_propagation(); this.clearSearch(cx); } })
