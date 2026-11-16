@@ -291,7 +291,7 @@ export default class ThreadsAgents extends View {
       .on_click(() => r.click())
       // The state marker sits top right, on the title line; text starts flush left like the threads list.
       .child(h_flex().gap(8).items_center()
-        // t3code card, as zerdr-sidebar: machine › project and time worked on top, title and spinner below.
+        // Two-line card, as zerdr-sidebar: machine › project and time worked on top, title and spinner below.
         .child(v_flex().flex_1().min_w(0).gap(4)
           .child(h_flex().gap(8).items_center().min_w(0).h(16).text_size(12).text_color(t.dim).opacity(busy ? 0.6 : 1)
             .child(h_flex().flex_1().min_w(0).gap(5).items_center()

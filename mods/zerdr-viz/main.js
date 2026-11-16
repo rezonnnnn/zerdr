@@ -1,4 +1,4 @@
-// Sidebar header: the portfolio hero's drifting mesh gradient (decorative; it follows the
+// Sidebar header: a drifting mesh gradient (decorative; it follows the
 // aggregate thread status from herdr), plus the sidebar toggle.
 
 import { View, div, svg, image } from "gpui-kit";
@@ -60,9 +60,9 @@ export default class ThreadsViz extends View {
     cx.spawn(async (cx) => { for (;;) { if ((await nextCommand()) === "toggle") toggleSidebar(cx); } });
   }
 
-  // The portfolio hero's mesh gradient at the sidebar-header scale (60px, the thread-header's height so the toggle centres on its icon row). There is one soft blob per
-  // hero colour (art/blob-*.png, from gen_blobs.py), each drifting on its own path, over the
-  // hero's mid blue. Grain sits on top, then art/fade.png: chrome with the prototype's alpha ramp, so the art
+  // The mesh gradient at the sidebar-header scale (60px, the thread-header's height so the toggle centres on its icon row). There is one soft blob per
+  // colour (art/blob-*.png), each drifting on its own path, over the
+  // mid blue. Grain sits on top, then a chrome alpha ramp, so the art
   // thins out towards the search box (herdr has no CSS mask; chrome over art is the same picture).
   // The header follows the aggregate thread state. It drifts at half speed when nothing is working,
   // and an amber layer fades in when a thread needs you. The ids are keyed by state, so the loops
@@ -91,7 +91,7 @@ export default class ThreadsViz extends View {
       .child(this.fade());
   }
 
-  // The prototype's mask ramp as chrome bands over the art: alpha = 1 - mask, 2px rows, solid
+  // The mask ramp as chrome bands over the art: alpha = 1 - mask, 2px rows, solid
   // from 30% down. An image overlay can't do this: herdr keeps image aspect, so it won't stretch to the width.
   fade() {
     const stops = [[0, 1], [0.3, 1], [0.45, 0.85], [0.6, 0.62], [0.74, 0.38], [0.87, 0.17], [0.95, 0.05], [1, 0]];
@@ -122,7 +122,7 @@ export default class ThreadsViz extends View {
     const blocked = open.some((x) => x.status === "blocked");
     const mode = open.some((x) => x.status === "working") ? "active" : "idle";
     const collapsed = narrow();
-    // The one solid 28px button: black, as the site's corner buttons over its hero.
+    // The one solid 28px button.
     const toggle = this.press.wire(div().id("threads-toggle").size(28).flex_none().flex().items_center().justify_center().rounded_full()
       // Frosted: translucent chrome with a hairline ring and a soft drop, over the mesh.
       .bg(t.chrome.slice(0, 7) + "99").border(1).border_color("#FFFFFF1F").shadow_sm().text_color("#FFFFFFE6").cursor_pointer()
