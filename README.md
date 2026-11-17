@@ -1,6 +1,6 @@
 # Zerdr
 
-**A threads layout for [Herdr](https://herdr.dev).** Every tab is a thread. The sidebar shows the agents working right now as cards and groups the rest by machine and project. Every thread, working or not, is the same two-line card: title, time worked and its state on top, git branch and the agent's logo below. There is one marker per state everywhere: teal spinner = working, amber dot = needs you, green check = done. A gradient at the top tells you how everything is going at a glance: drifting while anything works, still when nothing does, amber when something needs you. The terminal sits alone in a quiet rounded card.
+**A threads layout for [Herdr](https://herdr.dev).** Every tab is a thread. The sidebar shows the agents working right now as cards and groups the rest by machine and project. Every thread, working or not, is the same two-line card: title and its state on top; git branch, time worked and the agent's logo below. There is one marker per state everywhere: teal spinner = working, amber dot = needs you, green check = done. A gradient at the top tells you how everything is going at a glance: drifting while anything works, still when nothing does, amber when something needs you. The terminal sits alone in a quiet rounded card.
 
 ![Zerdr](preview.png)
 
