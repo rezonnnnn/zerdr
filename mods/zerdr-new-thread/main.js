@@ -216,7 +216,6 @@ export default class NewThread extends View {
     // One flat surface in the Zerdr layout's tones (zerdr-sidebar): chrome ground, the
     // selected fill only on the focused choice, the sidebar's faint white hovers, hairlines.
     const HOVER = "#FFFFFF08";
-    const PRESS = "#FFFFFF12";
 
     const agentRow = (a, i) => {
       const on = i === this.pick;
@@ -290,14 +289,14 @@ export default class NewThread extends View {
     const footer = h_flex().flex_none().pt(8).gap(10).items_center().text_size(11).text_color(t.dim)
       .child(toggle)
       .child(div().flex_1())
-      .child(h_flex().id("start").h(30).px(12).gap(6).flex_none().items_center().rounded(15)
-        .border(1).border_color(t.input).text_color(target ? t.foreground : t.dim)
-        .text_size(12).font_medium().cursor_pointer()
-        .when(Boolean(target), (el) => el.hover((s) => s.bg(PRESS)))
+      // The one primary style (as Create and Commit): solid when it can run, raised when it can't.
+      .child(h_flex().id("start").h(32).px(14).gap(6).flex_none().items_center().rounded(8)
+        .bg(target ? t.solid : t.raised).text_color(target ? t.solid_foreground : t.dim)
+        .text_size(12).font_medium()
+        .when(Boolean(target), (el) => el.cursor_pointer().hover((s) => s.opacity(0.9)))
         .tooltip(startLabel)
         .on_click((_e, cx) => this.start(cx))
-        .child(div().max_w(150).truncate().child(target ? `Start in ${target.name}` : "Start"))
-        .child(keycap("↵")));
+        .child(div().max_w(150).truncate().child(target ? `Start in ${target.name} ↵` : "Start")));
 
     return h_flex().id("zerdr-new-thread").track_focus(this.handle).size_full().min_h(0).p(10).gap(10)
       .bg(t.chrome).text_size(13).items_stretch()

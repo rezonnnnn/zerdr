@@ -116,8 +116,8 @@ export default class ThreadHeader extends View {
       .on_click(action).child(press.icon(id, glyph, 16)), id);
 
     return h_flex().id("zerdr-header").size_full().min_w(0).pl(27).pr(19).gap(12).items_center().bg(t.canvas)
-      // Breadcrumb and branch crumb share a baseline; the title click renames the tab (herdr asks for the name).
-      .child(h_flex().id("heading").flex_shrink_1().min_w(0).gap(8).items_baseline()
+      // Breadcrumb on one baseline; the branch chip centres on it. The title click renames the tab (herdr asks for the name).
+      .child(h_flex().id("heading").flex_shrink_1().min_w(0).gap(8).items_center()
         .when(Boolean(space), (el) => el.child(h_flex().flex_none().gap(8).items_baseline().text_size(18).font_medium().text_color(t.dim)
           .child(space.machine ?? "Local").child(div().text_color(t.idle).child("/"))
           .child(div().max_w(200).truncate().child(space.name)).child(div().text_color(t.idle).child("/"))))

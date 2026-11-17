@@ -64,15 +64,16 @@ export default class NewProject extends View {
         .text_color(t.muted).hover((s) => s.bg(t.hover).text_color(t.foreground))
         .on_click((_e, cx) => this.choose(cx)).child("Choose…"));
 
-    return v_flex().id("zerdr-new-project").size_full().min_h(0).bg(t.popover).p(8).text_size(13)
+    return v_flex().id("zerdr-new-project").size_full().min_h(0).bg(t.chrome).p(8).text_size(13)
       .child(head("Name"))
       .child(div().px(10).child(field().h(34).px(10).items_center().child(Input.new(this.name).w_full().text_size(13).text_color(t.foreground))))
       .child(head("Folder (optional)"))
       .child(div().px(10).child(folder))
       .child(h_flex().justify_end().px(10).pt(14).pb(4)
-        .child(h_flex().id("create").h(32).px(14).gap(7).items_center().rounded(16).border(1).border_color(t.input)
-          .font_weight(500).text_color(ok ? t.foreground : t.dim)
-          .when(ok, (el) => el.hover((s) => s.bg(t.hover)))
+        // The one primary style (as Start and Commit): solid when it can run, raised when it can't.
+        .child(h_flex().id("create").h(32).px(14).gap(7).items_center().rounded(8)
+          .font_weight(500).bg(ok ? t.solid : t.raised).text_color(ok ? t.solid_foreground : t.dim)
+          .when(ok, (el) => el.cursor_pointer().hover((s) => s.opacity(0.9)))
           .tooltip(ok ? "Create project" : "Give it a name or choose a folder")
           .on_click((_e, cx) => this.create(cx))
           .child("Create project ↵")));

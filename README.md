@@ -1,6 +1,6 @@
 # Zerdr
 
-**A threads layout for [Herdr](https://herdr.dev).** Every tab is a thread. The sidebar groups threads by machine and project, shows the agents working right now as cards, and a slow gradient at the top tells you how everything is going at a glance. The terminal sits alone in a quiet rounded card.
+**A threads layout for [Herdr](https://herdr.dev).** Every tab is a thread. The sidebar shows the agents working right now as cards and groups the rest by machine and project, with one marker per state everywhere (teal spinner = working, amber dot = needs you, check = done). A gradient at the top tells you how everything is going at a glance: drifting while anything works, still when nothing does, amber when something needs you. The terminal sits alone in a quiet rounded card.
 
 ![Zerdr](preview.png)
 
@@ -21,7 +21,7 @@ By hand:
 | `Ctrl+Shift+T` | New thread: pick an agent and a project (`Alt+W` = own git worktree) |
 | `Ctrl+Shift+B` | Collapse / expand the sidebar |
 | `Ctrl+Tab` / `Ctrl+Shift+Tab` (`Alt+]` / `Alt+[`) | Next / previous thread |
-| `F2` | Rename thread |
+| `F2` | Rename thread (Herdr's own key) |
 
 ## What it runs
 
