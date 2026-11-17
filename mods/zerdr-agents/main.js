@@ -54,6 +54,7 @@ const word = (s) => (s === "error" ? "blocked" : s === "done" ? "idle" : s ?? nu
 // its F2 name, else the lead agent's own title (Claude Code's session topic), else program, else "Thread N".
 const clean = (s) => (s ?? "").replace(/^[^\p{L}\p{N}]+/u, "").trim();
 const SHELL = /^(pwsh|powershell|cmd|bash|zsh|sh|fish)(\.exe)?$/i;
+const tail = (p) => (p ?? "").split(/[\\/]/).filter(Boolean).slice(-2).join("\\") || p || "";
 const telling = (s, prog) => {
   const own = clean(s);
   return own && own !== prog?.name && own.toLowerCase() !== prog?.key && !/^\d+$/.test(own)
@@ -218,9 +219,13 @@ export default class ThreadsAgents extends View {
     const matches = (p) => {
       if (!q) return true;
       const { tab, space } = tabs.get(p.tab);
-      // The sidebar's match rule: title, the lead agent's live title (its preview) and project.
+      // The sidebar's match rule (zerdr-sidebar describe(), keep in step): title, preview (the lead
+      // agent's live title, else its folder's tail) and project.
       const lead = allPanes.find((x) => x.tab === tab.id && x.terminal && x.program?.agent);
-      return `${threadTitle(tab, allPanes)} ${lead?.title ?? ""} ${space.name}`.toLowerCase().includes(q);
+      const title = threadTitle(tab, allPanes);
+      const live = telling(lead?.title, lead?.program);
+      const preview = live && live !== title ? live : tail(lead?.cwd ?? space.folder);
+      return `${title} ${preview} ${space.name}`.toLowerCase().includes(q);
     };
     const mains = agentsHere.filter((p) => !underAnother(p.terminal) && matches(p)).sort((a, b) => {
       const A = tabs.get(a.tab).space, B = tabs.get(b.tab).space;
