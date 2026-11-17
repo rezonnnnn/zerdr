@@ -5,12 +5,15 @@
 // (shared "threads.q") filters this list too. With no part it sizes its own block to its rows.
 // props().part: "list" or "footer" draws only that part; absent draws both.
 
-import { View, div, svg } from "gpui-kit";
+import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { agents, terminals, panes, focused, spaces, shared, setShared, run, theme, props, layout } from "herdr";
 import { Press } from "./press.js";
 
 const ICONS = "mods/workspace-chrome";
+const BRANCH = "mods/zerdr-header/icons/branch.svg";
+const CARD_PX = 48; // a thread card, as zerdr-sidebar's thread row (ROW_PX)
+const SUB_PX = 53; // a sub-agent row: py 6 + two lines
 // The light braille "dots" spinner (2-4 of 6 dots lit): it reads as motion. The 8-dot set with 7 lit
 // read as a drag grip, and any frame with a full column (⠇ ⠸ ⠧ ⠏) reads as a kebab menu at 15 px.
 // This set never fills a column: 3 or 4 dots, always spread over both.
@@ -254,6 +257,7 @@ export default class ThreadsAgents extends View {
       const start = out.length;
       out.push({ key: p.terminal, depth: 0, phase: phase(tabInfo, allPanes, all), status: a?.status ?? p.status, name: threadTitle(tabInfo, allPanes),
         program, since: tabInfo?.working_since, fallback: a?.title ?? p.title,
+        branch: p.branch ?? allPanes.find((x) => x.tab === p.tab && x.branch)?.branch ?? null,
         where: [program?.name, space.name].filter(Boolean).join(" · "), tabId: p.tab, space,
         click: () => run("agent.focus", { terminal: p.terminal }) });
       kids(p.terminal, 1);
@@ -272,35 +276,36 @@ export default class ThreadsAgents extends View {
     return { out, working };
   }
 
-  // A thread row, two lines: machine › project and the total time worked (kept by zerdr-sidebar,
-  // shared as "threads.worked") on top, so where a working thread runs is always in view; the
-  // title and its spinner below.
+  // A thread card: the same layout as zerdr-sidebar's thread row (keep the two in step). Top: title,
+  // time worked (kept by zerdr-sidebar, shared as "threads.worked") and the agent harness's logo.
+  // Bottom: the git branch (left) and the spinner (right). Machine and project are in the tooltip.
   threadRow(t, r) {
     const w = shared("threads.worked")?.[r.tabId];
     const ms = w ? w.acc + (w.since ? Date.now() - w.since : 0) : 0;
     const m = Math.floor(ms / 60000);
     const worked = m < 1 ? "<1m" : m < 60 ? `${m}m` : `${Math.floor(m / 60)}h ${m % 60}m`;
-    const machine = r.space.machine;
     // The shown thread is highlighted here as in the threads list, so switching moves it between them.
     const on = r.tabId === focused()?.tab;
-    // A working thread recedes (muted title) unless it is the one shown; `dim` alone keeps line 1 quiet at AA.
+    // A working thread recedes (muted title) unless it is the one shown.
     const busy = ["working", "agents"].includes(r.phase ?? r.status);
-    return this.slide.apply(div().id(`ag-${r.key}`), r.key).relative().flex_none().px(8).py(6).rounded(8).cursor_pointer()
+    const prog = r.program?.agent ? r.program : null;
+    const glyph = prog?.icon ? (prog.tint ? svg(prog.icon).size(12).text_color(t.dim) : image(prog.icon).size(12)) : null;
+    return this.slide.apply(div().id(`ag-${r.key}`), r.key).relative().flex_none().px(8).h(CARD_PX).rounded(8).cursor_pointer()
+      .flex().flex_col().justify_center().gap(3)
       .when(!on, (el) => el.hover((s) => s.bg("#FFFFFF08")))
-      .tooltip([r.name, `${machine ?? "This computer"} / ${r.space.name}`, "Focus"].join("\n"))
+      .tooltip([r.name, `${r.space.machine ?? "This computer"} / ${r.space.name}`, "Focus"].join("\n"))
       .on_click(() => r.click())
-      .child(h_flex().gap(8).items_center()
-        .child(v_flex().flex_1().min_w(0).gap(4)
-          .child(h_flex().gap(8).items_center().min_w(0).h(16).text_size(12).text_color(t.dim)
-            .child(h_flex().flex_1().min_w(0).gap(5).items_center()
-              .child(svg(`${ICONS}/${machine ? "server" : "monitor"}.svg`).size(12).flex_none())
-              .child(div().flex_none().child(machine ?? "Local"))
-              .child(div().flex_none().text_color(t.idle).child("›"))
-              .child(div().min_w(0).truncate().text_color(t.muted).child(r.space.name)))
-            .child(div().flex_none().tooltip("Time worked").child(worked)))
-          .child(h_flex().gap(8).items_center().min_w(0)
-            .child(div().flex_1().min_w(0).truncate().text_size(13).font_medium().text_color(busy && !on ? t.muted : t.foreground).child(r.name))
-            .child(div().flex_none().child(this.marker(t, r.phase ?? r.status, r.key))))));
+      .child(h_flex().items_center().gap(8)
+        .child(div().flex_1().min_w(0).truncate().text_size(13).font_medium().text_color(busy && !on ? t.muted : t.foreground).child(r.name))
+        .when(ms > 0, (el) => el.child(div().flex_none().text_size(12).text_color(t.dim).tooltip("Time worked").child(worked)))
+        .when(Boolean(prog), (el) => el.child(div().id(`harness-${r.key}`).flex_none().min_w(16).h(16).flex().items_center().justify_center()
+          .max_w(110).truncate().text_size(11.5).text_color(t.dim).tooltip(prog.name)
+          .child(glyph ?? prog.name))))
+      .child(h_flex().h(16).items_center().gap(8)
+        .child(h_flex().flex_1().min_w(0).items_center().gap(5).text_size(11.5).text_color(t.dim)
+          .when(Boolean(r.branch), (el) => el.child(svg(BRANCH).size(12).flex_none())
+            .child(div().min_w(0).truncate().child(r.branch))))
+        .child(div().flex_none().child(this.marker(t, r.phase ?? r.status, r.key))));
   }
 
   row(t, r) {
@@ -384,7 +389,7 @@ export default class ThreadsAgents extends View {
   // Size the block to its rows, clamped to capPx(); the list scrolls past that.
   // Resize only when the clamped size changes, so a resize never re-triggers itself.
   fit(out, listOnly) {
-    const rows = Math.max(out.length, 1) * 53;
+    const rows = out.length ? out.reduce((n, r) => n + (r.depth === 0 ? CARD_PX : SUB_PX), 0) : SUB_PX;
     const px = Math.min(capPx(), Math.max(listOnly ? 60 : MIN_PX, 41 + rows + 10 + (listOnly ? 0 : 53)));
     const now = find(layout(), "agents")?.size?.px;
     if (px === this.sized) return;
