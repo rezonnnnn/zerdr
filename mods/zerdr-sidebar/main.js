@@ -1,15 +1,17 @@
 // Threads list, grouped by machine (this computer first, then
-// remotes by name), then project (space order), then one-line thread rows (needs-you first, then
+// remotes by name), then project (space order), then two-line thread rows (needs-you first, then
 // newest). Search is shared as "threads.q" so zerdr-agents filters Working too. A project header folds its threads. Working threads show in zerdr-agents.
 // Archive = tab.settle; archived threads sit in a folded "Archived" section at the bottom.
 // Opening one brings it back (Herdr unsettles a shown tab); hover offers Unarchive (tab.unsettle).
 
-import { View, div, svg } from "gpui-kit";
+import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { spaces, panes, agents, terminals, focused, run, theme, layout, setAgentOrder, openOverlay, nextCommand, setShared, shared, hc } from "herdr";
 import { Press } from "./press.js";
 
 const ICONS = "mods/workspace-chrome";
+const BRANCH = "mods/zerdr-header/icons/branch.svg";
+const ROW_PX = 48; // a thread row: two lines (title / branch + harness)
 // Dock sizing (fit): search row (mt 8 + 32 + mb 6), list padding (pt 4 + pb 8), floor, header.
 const HEAD_PX = 46, LIST_PAD = 12, MIN_PX = 60, VIZ_PX = 60;
 // The light braille "dots" spinner (2-4 of 6 dots lit): it reads as motion. The 8-dot set with 7 lit
@@ -324,7 +326,8 @@ export default class ThreadsSidebar extends View {
       grew = false;
       for (const t of all) if (t.parent && own.has(t.parent) && !own.has(t.address) && t.state === "live") { own.add(t.address); subs++; grew = true; }
     }
-    return { title, preview, live: live && live !== title ? live : null, program: lead?.program ?? null, subs, phase: phase(tab, allPanes, all) };
+    const branch = lead?.branch ?? mine.find((p) => p.branch)?.branch ?? null;
+    return { title, preview, live: live && live !== title ? live : null, program: lead?.program ?? null, branch, subs, phase: phase(tab, allPanes, all) };
   }
 
   // Shape and colour, never colour alone, the same in every list (zerdr-agents keeps a copy):
@@ -416,8 +419,9 @@ export default class ThreadsSidebar extends View {
       .child(svg(`${ICONS}/${open ? "chevron-down" : "chevron-right"}.svg`).size(12).flex_none().text_color(t.dim));
   }
 
-  // One line: title, time worked, state marker. Machine and project are said once, in the headers
-  // above. The marker is the shared one (needs-you amber dot, done check) and fades to 50% once
+  // Two lines. Top: title, time worked, state marker. Bottom: the git branch (left) and the agent
+  // harness running the thread (right); either side is empty when there is none. Machine and project
+  // are said once, in the headers above. The marker is the shared one (needs-you amber dot, done check) and fades to 50% once
   // the thread has been looked at. Hover lays Rename / Archive over the row's right end on the
   // raised fill, so nothing in the row moves or re-truncates.
   row(t, item, shownTab) {
@@ -433,8 +437,8 @@ export default class ThreadsSidebar extends View {
     const mark = d.phase === "blocked" || d.phase === "done" ? d.phase : null;
     const tip = d.phase === "blocked" ? `Needs you · ${fmtAgo(tab.changed_at)}` : ms ? `Last active ${fmtAgo(tab.changed_at)}` : "Not started";
     const btn = (id, icon, label, cmd) => this.ibtn(id, icon, label, 22, (cx) => { run(cmd, { id: tab.id }); done(); cx.notify(); }).bg(t.raised);
-    return this.slide.apply(div().id(`th-${tab.id}`), tab.id).relative().flex_none().my(2).px(8).h(32).rounded(8)
-      .flex().items_center().gap(8).cursor_pointer()
+    return this.slide.apply(div().id(`th-${tab.id}`), tab.id).relative().flex_none().my(2).px(8).h(ROW_PX).rounded(8)
+      .flex().flex_col().justify_center().gap(3).cursor_pointer()
       .when(!on, (el) => el.hover((s) => s.bg("#FFFFFF08")))
       .tooltip([d.title, where, PHASE_TIP[d.phase], tip].filter(Boolean).join("\n"))
       .on_hover((h, cx) => {
@@ -443,6 +447,7 @@ export default class ThreadsSidebar extends View {
         cx.notify();
       })
       .on_click(() => this.select(space, tab))
+      .child(h_flex().items_center().gap(8)
       .child(div().flex_1().min_w(0).truncate().text_size(13).text_color(t.foreground)
         .when(fresh, (el) => el.font_semibold())
         .when(!fresh, (el) => el.font_medium())
@@ -451,11 +456,25 @@ export default class ThreadsSidebar extends View {
       .when(Boolean(mark), (el) => el.child(div().id(`dot-${tab.id}`).flex_none().opacity(fresh ? 1 : 0.5)
         .transition("opacity", { duration: 1200, easing: "ease-out" })
         .tooltip(d.phase === "blocked" ? (ask ? "Needs you" : "Needs you · seen") : unseen ? "Finished · not opened yet" : "Finished · seen")
-        .child(this.marker(t, mark, tab.id))))
+        .child(this.marker(t, mark, tab.id)))))
+      .child(this.meta(t, d, tab.id))
       .when(hover, (el) => el.child(h_flex().absolute().right(0).top(0).h_full().items_center().gap(4).pl(8).pr(5).bg(t.raised).rounded_r(8)
         .when(Boolean(tab.settled), (x) => x.child(btn(`unarc-${tab.id}`, "archive", "Unarchive", "tab.unsettle")))
         .when(!tab.settled, (x) => x.child(btn(`ren-${tab.id}`, "square-pen", "Rename (F2)", "tab.rename"))
           .child(btn(`arc-${tab.id}`, "archive", "Archive", "tab.settle")))));
+  }
+
+  // A row's bottom line: branch icon + branch on the left, the agent harness's logo on the right
+  // (its name as the tooltip; the name itself only when it has no logo).
+  meta(t, d, key) {
+    const prog = d.program?.agent ? d.program : null;
+    const glyph = (p) => p.tint ? svg(p.icon).size(12).flex_none().text_color(t.dim) : image(p.icon).size(12).flex_none();
+    return h_flex().h(16).items_center().gap(8).text_size(11.5).text_color(t.dim)
+      .child(h_flex().flex_1().min_w(0).items_center().gap(5)
+        .when(Boolean(d.branch), (el) => el.child(svg(BRANCH).size(12).flex_none())
+          .child(div().min_w(0).truncate().child(d.branch))))
+      .when(Boolean(prog), (el) => el.child(div().id(`harness-${key}`).flex_none().max_w(110).truncate().tooltip(prog.name)
+        .child(prog.icon ? glyph(prog) : prog.name)));
   }
 
   rail(t, items, shownTab) {
@@ -512,7 +531,7 @@ export default class ThreadsSidebar extends View {
     }
     this.slide.plan(plan.map((p) => p.key), 4, cx); // rows and headers carry my(2)
     // Dock: size the block to its rows' measured heights (estimates until measured), each with my(2).
-    const est = (p) => this.slide.h.get(p.key) ?? (p.head === "m" ? 24 : p.head ? 26 : 32);
+    const est = (p) => this.slide.h.get(p.key) ?? (p.head === "m" ? 24 : p.head ? 26 : ROW_PX);
     this.fit(HEAD_PX + LIST_PAD + plan.reduce((n, p) => n + est(p) + 4, 0));
     const rows = plan.map((p) => p.head === "m" ? this.machineHead(t, p.machine, p.key)
       : p.head === "s" ? this.spaceHead(t, p.space, p.n, p.key, p.needs)
