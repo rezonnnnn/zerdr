@@ -12,7 +12,7 @@ import { Press } from "./press.js";
 
 const ICONS = "mods/workspace-chrome";
 const BRANCH = "mods/zerdr-header/icons/branch.svg";
-const CARD_PX = 48; // a thread card, as zerdr-sidebar's thread row (ROW_PX)
+const CARD_PX = 56; // a thread card, as zerdr-sidebar's thread row (ROW_PX)
 const SUB_PX = 53; // a sub-agent row: py 6 + two lines
 // The light braille "dots" spinner (2-4 of 6 dots lit): it reads as motion. The 8-dot set with 7 lit
 // read as a drag grip, and any frame with a full column (⠇ ⠸ ⠧ ⠏) reads as a kebab menu at 15 px.
@@ -289,21 +289,21 @@ export default class ThreadsAgents extends View {
     // A working thread recedes (muted title) unless it is the one shown.
     const busy = ["working", "agents"].includes(r.phase ?? r.status);
     const prog = r.program?.agent ? r.program : null;
-    const glyph = prog?.icon ? (prog.tint ? svg(prog.icon).size(12).text_color(t.dim) : image(prog.icon).size(12)) : null;
+    const glyph = prog?.icon ? (prog.tint ? svg(prog.icon).size(14).text_color(t.dim) : image(prog.icon).size(14)) : null;
     return this.slide.apply(div().id(`ag-${r.key}`), r.key).relative().flex_none().px(8).h(CARD_PX).rounded(8).cursor_pointer()
-      .flex().flex_col().justify_center().gap(3)
+      .flex().flex_col().justify_center().gap(5)
       .when(!on, (el) => el.hover((s) => s.bg("#FFFFFF08")))
       .tooltip([r.name, `${r.space.machine ?? "This computer"} / ${r.space.name}`, "Focus"].join("\n"))
       .on_click(() => r.click())
       .child(h_flex().items_center().gap(8)
-        .child(div().flex_1().min_w(0).truncate().text_size(13).font_medium().text_color(busy && !on ? t.muted : t.foreground).child(r.name))
-        .when(ms > 0, (el) => el.child(div().flex_none().text_size(12).text_color(t.dim).tooltip("Time worked").child(worked)))
+        .child(div().flex_1().min_w(0).truncate().text_size(14).font_medium().text_color(busy && !on ? t.muted : t.foreground).child(r.name))
+        .when(ms > 0, (el) => el.child(div().flex_none().text_size(12.5).text_color(t.dim).tooltip("Time worked").child(worked)))
         .when(Boolean(prog), (el) => el.child(div().id(`harness-${r.key}`).flex_none().min_w(16).h(16).flex().items_center().justify_center()
-          .max_w(110).truncate().text_size(11.5).text_color(t.dim).tooltip(prog.name)
+          .max_w(110).truncate().text_size(12).text_color(t.dim).tooltip(prog.name)
           .child(glyph ?? prog.name))))
       .child(h_flex().h(16).items_center().gap(8)
-        .child(h_flex().flex_1().min_w(0).items_center().gap(5).text_size(11.5).text_color(t.dim)
-          .when(Boolean(r.branch), (el) => el.child(svg(BRANCH).size(12).flex_none())
+        .child(h_flex().flex_1().min_w(0).items_center().gap(5).text_size(12).text_color(t.dim)
+          .when(Boolean(r.branch), (el) => el.child(svg(BRANCH).size(14).flex_none())
             .child(div().min_w(0).truncate().child(r.branch))))
         .child(div().flex_none().child(this.marker(t, r.phase ?? r.status, r.key))));
   }
