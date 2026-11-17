@@ -419,8 +419,8 @@ export default class ThreadsSidebar extends View {
       .child(svg(`${ICONS}/${open ? "chevron-down" : "chevron-right"}.svg`).size(12).flex_none().text_color(t.dim));
   }
 
-  // Two lines. Top: title, time worked, state marker. Bottom: the git branch (left) and the agent
-  // harness running the thread (right); either side is empty when there is none. Machine and project
+  // Two lines. Top: title, time worked, the agent harness's logo. Bottom: the git branch (left) and
+  // the state marker (right), so markers line up in one column with the Working cards' spinners. Machine and project
   // are said once, in the headers above. The marker is the shared one (needs-you amber dot, done check) and fades to 50% once
   // the thread has been looked at. Hover lays Rename / Archive over the row's right end on the
   // raised fill, so nothing in the row moves or re-truncates.
@@ -453,28 +453,35 @@ export default class ThreadsSidebar extends View {
         .when(!fresh, (el) => el.font_medium())
         .child(d.title))
       .when(ms > 0, (el) => el.child(div().flex_none().text_size(12).text_color(t.dim).tooltip("Time worked").child(fmtWorked(ms))))
-      .when(Boolean(mark), (el) => el.child(div().id(`dot-${tab.id}`).flex_none().opacity(fresh ? 1 : 0.5)
-        .transition("opacity", { duration: 1200, easing: "ease-out" })
-        .tooltip(d.phase === "blocked" ? (ask ? "Needs you" : "Needs you · seen") : unseen ? "Finished · not opened yet" : "Finished · seen")
-        .child(this.marker(t, mark, tab.id)))))
-      .child(this.meta(t, d, tab.id))
+      .child(this.harness(t, d, tab.id)))
+      .child(h_flex().h(16).items_center().gap(8)
+        .child(this.branch(t, d))
+        .when(Boolean(mark), (el) => el.child(div().id(`dot-${tab.id}`).flex_none().opacity(fresh ? 1 : 0.5)
+          .transition("opacity", { duration: 1200, easing: "ease-out" })
+          .tooltip(d.phase === "blocked" ? (ask ? "Needs you" : "Needs you · seen") : unseen ? "Finished · not opened yet" : "Finished · seen")
+          .child(this.marker(t, mark, tab.id)))))
       .when(hover, (el) => el.child(h_flex().absolute().right(0).top(0).h_full().items_center().gap(4).pl(8).pr(5).bg(t.raised).rounded_r(8)
         .when(Boolean(tab.settled), (x) => x.child(btn(`unarc-${tab.id}`, "archive", "Unarchive", "tab.unsettle")))
         .when(!tab.settled, (x) => x.child(btn(`ren-${tab.id}`, "square-pen", "Rename (F2)", "tab.rename"))
           .child(btn(`arc-${tab.id}`, "archive", "Archive", "tab.settle")))));
   }
 
-  // A row's bottom line: branch icon + branch on the left, the agent harness's logo on the right
-  // (its name as the tooltip; the name itself only when it has no logo).
-  meta(t, d, key) {
+  // Top line, right end: the agent harness's logo in the marker's 16 px column (its name as the
+  // tooltip; the name itself only when it has no logo). Nothing for a plain shell.
+  harness(t, d, key) {
     const prog = d.program?.agent ? d.program : null;
-    const glyph = (p) => p.tint ? svg(p.icon).size(12).flex_none().text_color(t.dim) : image(p.icon).size(12).flex_none();
-    return h_flex().h(16).items_center().gap(8).text_size(11.5).text_color(t.dim)
-      .child(h_flex().flex_1().min_w(0).items_center().gap(5)
-        .when(Boolean(d.branch), (el) => el.child(svg(BRANCH).size(12).flex_none())
-          .child(div().min_w(0).truncate().child(d.branch))))
-      .when(Boolean(prog), (el) => el.child(div().id(`harness-${key}`).flex_none().max_w(110).truncate().tooltip(prog.name)
-        .child(prog.icon ? glyph(prog) : prog.name)));
+    if (!prog) return div();
+    const glyph = prog.tint ? svg(prog.icon).size(12).text_color(t.dim) : image(prog.icon).size(12);
+    return div().id(`harness-${key}`).flex_none().min_w(16).h(16).flex().items_center().justify_center()
+      .max_w(110).truncate().text_size(11.5).text_color(t.dim).tooltip(prog.name)
+      .child(prog.icon ? glyph : prog.name);
+  }
+
+  // Bottom line, left: branch icon + branch (empty when the thread is on none).
+  branch(t, d) {
+    return h_flex().flex_1().min_w(0).items_center().gap(5).text_size(11.5).text_color(t.dim)
+      .when(Boolean(d.branch), (el) => el.child(svg(BRANCH).size(12).flex_none())
+        .child(div().min_w(0).truncate().child(d.branch)));
   }
 
   rail(t, items, shownTab) {
