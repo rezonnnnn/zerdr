@@ -277,8 +277,8 @@ export default class ThreadsAgents extends View {
   }
 
   // A thread card: the same layout as zerdr-sidebar's thread row (keep the two in step). Top: title,
-  // time worked (kept by zerdr-sidebar, shared as "threads.worked") and the agent harness's logo.
-  // Bottom: the git branch (left) and the spinner (right). Machine and project are in the tooltip.
+  // time worked (kept by zerdr-sidebar, shared as "threads.worked") and the spinner.
+  // Bottom: the git branch (left) and the agent harness's logo (right). Machine and project are in the tooltip.
   threadRow(t, r) {
     const w = shared("threads.worked")?.[r.tabId];
     const ms = w ? w.acc + (w.since ? Date.now() - w.since : 0) : 0;
@@ -298,14 +298,14 @@ export default class ThreadsAgents extends View {
       .child(h_flex().items_center().gap(8)
         .child(div().flex_1().min_w(0).truncate().text_size(14).font_medium().text_color(busy && !on ? t.muted : t.foreground).child(r.name))
         .when(ms > 0, (el) => el.child(div().flex_none().text_size(12.5).text_color(t.dim).tooltip("Time worked").child(worked)))
-        .when(Boolean(prog), (el) => el.child(div().id(`harness-${r.key}`).flex_none().min_w(16).h(16).flex().items_center().justify_center()
-          .max_w(110).truncate().text_size(12).text_color(t.dim).tooltip(prog.name)
-          .child(glyph ?? prog.name))))
+        .child(div().flex_none().child(this.marker(t, r.phase ?? r.status, r.key))))
       .child(h_flex().h(16).items_center().gap(8)
         .child(h_flex().flex_1().min_w(0).items_center().gap(5).text_size(12).text_color(t.dim)
           .when(Boolean(r.branch), (el) => el.child(svg(BRANCH).size(14).flex_none())
             .child(div().min_w(0).truncate().child(r.branch))))
-        .child(div().flex_none().child(this.marker(t, r.phase ?? r.status, r.key))));
+        .when(Boolean(prog), (el) => el.child(div().id(`harness-${r.key}`).flex_none().min_w(16).h(16).flex().items_center().justify_center()
+          .max_w(110).truncate().text_size(12).text_color(t.dim).tooltip(prog.name)
+          .child(glyph ?? prog.name))));
   }
 
   row(t, r) {
