@@ -11,7 +11,7 @@ import { Press } from "./press.js";
 
 const ICONS = "mods/workspace-chrome";
 const BRANCH = "mods/zerdr-header/icons/branch.svg";
-const ROW_PX = 48; // a thread row: two lines (title / branch + harness)
+const ROW_PX = 56; // a thread row: two lines (title / branch + harness)
 // Dock sizing (fit): search row (mt 8 + 32 + mb 6), list padding (pt 4 + pb 8), floor, header.
 const HEAD_PX = 46, LIST_PAD = 12, MIN_PX = 60, VIZ_PX = 60;
 // The light braille "dots" spinner (2-4 of 6 dots lit): it reads as motion. The 8-dot set with 7 lit
@@ -438,7 +438,7 @@ export default class ThreadsSidebar extends View {
     const tip = d.phase === "blocked" ? `Needs you · ${fmtAgo(tab.changed_at)}` : ms ? `Last active ${fmtAgo(tab.changed_at)}` : "Not started";
     const btn = (id, icon, label, cmd) => this.ibtn(id, icon, label, 22, (cx) => { run(cmd, { id: tab.id }); done(); cx.notify(); }).bg(t.raised);
     return this.slide.apply(div().id(`th-${tab.id}`), tab.id).relative().flex_none().my(2).px(8).h(ROW_PX).rounded(8)
-      .flex().flex_col().justify_center().gap(3).cursor_pointer()
+      .flex().flex_col().justify_center().gap(5).cursor_pointer()
       .when(!on, (el) => el.hover((s) => s.bg("#FFFFFF08")))
       .tooltip([d.title, where, PHASE_TIP[d.phase], tip].filter(Boolean).join("\n"))
       .on_hover((h, cx) => {
@@ -448,11 +448,11 @@ export default class ThreadsSidebar extends View {
       })
       .on_click(() => this.select(space, tab))
       .child(h_flex().items_center().gap(8)
-      .child(div().flex_1().min_w(0).truncate().text_size(13).text_color(t.foreground)
+      .child(div().flex_1().min_w(0).truncate().text_size(14).text_color(t.foreground)
         .when(fresh, (el) => el.font_semibold())
         .when(!fresh, (el) => el.font_medium())
         .child(d.title))
-      .when(ms > 0, (el) => el.child(div().flex_none().text_size(12).text_color(t.dim).tooltip("Time worked").child(fmtWorked(ms))))
+      .when(ms > 0, (el) => el.child(div().flex_none().text_size(12.5).text_color(t.dim).tooltip("Time worked").child(fmtWorked(ms))))
       .child(this.harness(t, d, tab.id)))
       .child(h_flex().h(16).items_center().gap(8)
         .child(this.branch(t, d))
@@ -471,16 +471,16 @@ export default class ThreadsSidebar extends View {
   harness(t, d, key) {
     const prog = d.program?.agent ? d.program : null;
     if (!prog) return div();
-    const glyph = prog.tint ? svg(prog.icon).size(12).text_color(t.dim) : image(prog.icon).size(12);
+    const glyph = prog.tint ? svg(prog.icon).size(14).text_color(t.dim) : image(prog.icon).size(14);
     return div().id(`harness-${key}`).flex_none().min_w(16).h(16).flex().items_center().justify_center()
-      .max_w(110).truncate().text_size(11.5).text_color(t.dim).tooltip(prog.name)
+      .max_w(110).truncate().text_size(12).text_color(t.dim).tooltip(prog.name)
       .child(prog.icon ? glyph : prog.name);
   }
 
   // Bottom line, left: branch icon + branch (empty when the thread is on none).
   branch(t, d) {
-    return h_flex().flex_1().min_w(0).items_center().gap(5).text_size(11.5).text_color(t.dim)
-      .when(Boolean(d.branch), (el) => el.child(svg(BRANCH).size(12).flex_none())
+    return h_flex().flex_1().min_w(0).items_center().gap(5).text_size(12).text_color(t.dim)
+      .when(Boolean(d.branch), (el) => el.child(svg(BRANCH).size(14).flex_none())
         .child(div().min_w(0).truncate().child(d.branch)));
   }
 
