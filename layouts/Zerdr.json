@@ -60,7 +60,7 @@
             }
           },
           "size": {
-            "px": 84
+            "px": 53
           }
         }
       ],
@@ -100,11 +100,11 @@
                   "background": "background",
                   "border": {
                     "width": 1,
-                    "color": "#ffffff0a"
+                    "color": "#ffffff14"
                   },
                   "focus": {
                     "width": 1,
-                    "color": "#ffffff14"
+                    "color": "#ffffff3d"
                   },
                   "radius": 12,
                   "gap": 8,
@@ -184,7 +184,7 @@
     "foreground": "#eeeeef",
     "muted": "#b4b7bd",
     "dim": "#8a8f98",
-    "accent": "#06b6d4",
+    "accent": "#3b82f6",
     "working": "#14b8a6",
     "blocked": "#f5b83d",
     "done": "#d1d1d6",

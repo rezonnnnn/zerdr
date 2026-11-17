@@ -2,7 +2,16 @@
 // with bounded read-only previews and rendered Markdown.
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, Editor, EditorState, TextView, InputState, Input } from "gpui-base";
+
 import { spaces, panes, focused, exec, readTextFile, watchFolder, theme, settings, window, shared, setShared, pickFolder, home } from "herdr";
+
+const PANE_BORDER = "#ffffff14";
+// A long path cut from the left at a separator, so the end (the folder itself) stays readable.
+const tailPath = (p, max = 34) => {
+  if (!p || p.length <= max) return p ?? "";
+  const cut = p.slice(p.length - max), at = cut.search(/[\\/]/);
+  return "…" + (at >= 0 ? cut.slice(at) : cut);
+};
 
 // Chosen folders, per space id; shared state persists across restarts.
 const PINS = "zerdr-files.pins";
@@ -74,8 +83,9 @@ export default class Files extends View {
     this.entries = new Map(); this.folders = new Set(); this.pending = new Set(); this.marks = {};
     this.history = []; this.mode = "preview";
     this.input = InputState.new({ placeholder: "Paste a folder path, Enter to open" });
-    this.input.on("focus", (_e, cx) => { this.typing = true; cx.notify(); });
-    this.input.on("blur", (_e, cx) => { this.typing = false; this.input.set_value(this.root ?? ""); cx.notify(); });
+    // At rest the field shows the path's tail (the folder you are in); focus puts the full path back to edit.
+    this.input.on("focus", (_e, cx) => { this.typing = true; this.input.set_value(this.root ?? ""); cx.notify(); });
+    this.input.on("blur", (_e, cx) => { this.typing = false; this.input.set_value(tailPath(this.root)); cx.notify(); });
     this.input.on("submit", (_e, cx) => this.choose(this.input.value(), cx));
     // Opened as a viewer: props { file } (absolute, or under the folder shown); kept across focus changes.
     this.viewer = _props?.file ?? null;
@@ -120,7 +130,7 @@ export default class Files extends View {
       if (this.viewer && this.file) { if (this.text === null) this.load(this.file, cx, false); }
       else { this.show(null); this.history = saved?.history ?? []; if (saved?.file) this.show(saved.file, cx); }
       // Not from render: keep the path bar in step with the folder shown.
-      cx.spawn(async cx => { if (!this.typing) this.input.set_value(this.root ?? ""); cx.notify(); });
+      cx.spawn(async cx => { if (!this.typing) this.input.set_value(tailPath(this.root)); cx.notify(); });
     } else if (this.file) this.load(this.file, cx, true);
     if (!cwd || this.loading) return;
     const context = this.context;
@@ -308,10 +318,11 @@ export default class Files extends View {
         .child(div().id("files-path").flex_1().min_w(0).h(26).px(8).flex().items_center().rounded(6).border_1().border_color(this.typing ? t.accent : t.border).cursor_text()
           .on_mouse_down("left", (_e, cx) => cx.stop_propagation()).child(Input.new(this.input).w_full().text_size(12).text_color(t.foreground)))
         .child(button("files-browse", "Browse…", (_e, cx) => this.browse(cx))))
-      .child(h_flex().gap(6).items_center().text_size(11)
-        .child(div().flex_1().min_w(0).truncate().text_color(this.pathError ? t.blocked : pinned ? t.accent : t.dim)
-          .child(this.pathError ?? (pinned ? "Pinned folder for this project" : "Following the focused pane")))
-        .when(pinned, el => el.child(button("files-follow", "Follow pane", (_e, cx) => { this.pathError = null; this.choose("", cx); }))));
+      // Status only when it says something: following the focused pane is the default and goes unsaid.
+      .when(pinned || Boolean(this.pathError), el => el.child(h_flex().gap(6).items_center().text_size(11)
+        .child(div().flex_1().min_w(0).truncate().text_color(this.pathError ? t.blocked : t.accent)
+          .child(this.pathError ?? "Pinned folder for this project"))
+        .when(pinned, el => el.child(button("files-follow", "Follow pane", (_e, cx) => { this.pathError = null; this.choose("", cx); })))));
     const viewer = () => {
       if (this.fileError || this.text === null) return div().p(12).text_color(t.dim).child(this.fileError || "Loading file…");
       if (md && this.mode === "preview")
@@ -320,7 +331,8 @@ export default class Files extends View {
             .on_link_click((url, cx) => this.link(url, cx)));
       return this.code ? Editor.new(this.code).flex_1().min_h(0) : div().p(12).text_color(t.dim).child("Loading file…");
     };
-    return v_flex().id("files").size_full().min_h(0).rounded(10).overflow_hidden().bg(t.background).border_1().border_color(t.border).text_color(t.foreground).text_size(13)
+    // The same card as the terminal panes (layouts/Zerdr.json pane: radius 12, #ffffff14 border).
+    return v_flex().id("files").size_full().min_h(0).rounded(12).overflow_hidden().bg(t.background).border_1().border_color(PANE_BORDER).text_color(t.foreground).text_size(13)
       .child(h_flex().h(42).flex_none().px(14).gap(8).items_center().border_b(1).border_color(t.border)
         .when(Boolean(this.file), el => el.child(div().id("files-back").w(20).cursor_pointer().text_color(t.muted).on_click((_e, cx) => { this.notice = null; this.back(cx); }).child("←")))
         .child(div().font_semibold().flex_none().child("Files"))
