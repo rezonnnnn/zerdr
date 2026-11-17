@@ -1,26 +1,25 @@
 // Working agents of every thread: each main agent titled by its thread (as the sidebar names
 // it), then its sub-agents (hc run children via `parent`) indented. A group shows only while
-// something in it is working. Everything comes from herdr; this mod does no file I/O. Footer: working / needs-you totals over every thread, settings,
-// then a line of key hints. With no part it sizes its own block (layout.resize) to its rows.
+// something in it is working. Everything comes from herdr; this mod does no file I/O. Footer: one
+// line of working / needs-you totals over every thread, then settings. The sidebar's search
+// (shared "threads.q") filters this list too. With no part it sizes its own block to its rows.
 // props().part: "list" or "footer" draws only that part; absent draws both.
 
-import { View, div, image, svg } from "gpui-kit";
+import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { agents, terminals, panes, focused, spaces, shared, setShared, run, theme, props, layout } from "herdr";
 import { Press } from "./press.js";
 
-const TILE = "#151517"; // program badge tile: no token is this dark
-// As zerdr-sidebar: all work done (green).
-const DONE = "#22c55e";
 const ICONS = "mods/workspace-chrome";
 // The light braille "dots" spinner (2-4 of 6 dots lit): it reads as motion. The 8-dot set with 7 lit
-// read as a drag grip once centred on a two-line row.
-const BRAILLE = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+// read as a drag grip, and any frame with a full column (⠇ ⠸ ⠧ ⠏) reads as a kebab menu at 15 px.
+// This set never fills a column: 3 or 4 dots, always spread over both.
+const BRAILLE = ["⠋", "⠙", "⠚", "⠞", "⠖", "⠦", "⠴", "⠲", "⠳", "⠓"];
 // The agents block grows to fit its rows, but never past SHARE of the sidebar below the
 // header (VIZ_PX): past that its list scrolls, so it never covers the threads list. The layout
 // does not hold the threads block's min against a large px sibling, so the cap lives here.
 const MIN_PX = 90;
-const VIZ_PX = 96;
+const VIZ_PX = 60;
 const SHARE = 0.45;
 function capPx() {
   let h = 0;
@@ -37,14 +36,10 @@ function find(node, id) {
   return null;
 }
 const narrow = () => (find(layout(), "sidebar")?.size?.px ?? Infinity) < 160;
-// Sidebar fold: zerdr-viz resizes the sidebar once per toggle (each width step resized the
-// terminal, and the agent in it redrew its whole screen per step). Smoothness comes from here
-// instead: shared "sidebar.phase" is leaving (fade out, 12 px drift, 120 ms) -> arriving (one
-// frame hidden at the new width) -> idle (fade in, 180 ms). Native transitions only.
+// Sidebar fold: as zerdr-sidebar (keep the two in step). zerdr-viz resizes once per toggle;
+// "sidebar.phase" leaving slides the content out (200 ms ease-in), idle slides it back (260 ms ease-out).
 const settle = (el) => {
   const p = shared("sidebar.phase") ?? "idle";
-  // Slide (2026-11-16): content travels its full width (leaving 200 ms ease-in, idle 260 ms ease-out);
-  // the layout still resizes once per toggle, so the terminal reflows once.
   const spec = p === "idle" ? { duration: 260, easing: "ease-out" } : p === "leaving" ? { duration: 200, easing: "ease-in" } : 1;
   const off = -(shared("sidebar.width") ?? 272);
   // The offset must sit on a child: Herdr places a mod's root element itself and ignores its left.
@@ -124,14 +119,6 @@ class Slide {
   }
 }
 
-// Line 2 of a thread row, an identical copy of zerdr-sidebar's (keep the two in step): the
-// harness's own icon and the context on the left; the time worked on the right behind a stopwatch.
-const TIMER = "mods/zerdr-sidebar/icons/timer.svg";
-const progIcon = (prog, size) => !prog?.icon ? null
-  : (prog.tint ? svg(prog.icon).text_color(prog.color ?? theme().muted) : image(prog.icon)).size(size).flex_none();
-const duration = (t, text) => h_flex().flex_none().gap(4).items_center().text_size(12).text_color(t.dim)
-  .child(svg(TIMER).size(12).flex_none()).child(text);
-
 function elapsed(ms) {
   if (!ms) return "";
   const m = Math.floor((Date.now() - ms) / 60000);
@@ -199,15 +186,15 @@ export default class ThreadsAgents extends View {
     this.glide = new Glide(-1); // the threads list is above
   }
 
-  // The sidebar's markers. A main row shows its thread's phase; a working sub-agent row shows
+  // The sidebar's markers (keep the two in step). A main row shows its thread's phase; a working sub-agent row shows
   // the same spinner (one working marker everywhere).
   marker(t, status, key) {
     const box = (el) => div().size(16).flex_none().flex().items_center().justify_center().child(el);
     // Working, or waiting on sub-agents or background shells: one braille spinner (native frames).
-        if (status === "working" || status === "agents") return box(div().id(`mk-wk-${key}`).text_size(15).text_color(t.working).frames(BRAILLE, 80));
+    if (status === "working" || status === "agents") return box(div().id(`mk-wk-${key}`).text_size(15).text_color(t.working).frames(BRAILLE, 80));
     if (status === "blocked") return box(div().size(13).rounded_full().bg(t.blocked + "38").flex().items_center().justify_center()
       .child(div().size(7).rounded_full().bg(t.blocked)));
-    if (status === "done") return box(svg(`${ICONS}/circle-check.svg`).size(14).text_color(DONE));
+    if (status === "done") return box(svg(`${ICONS}/circle-check.svg`).size(14).text_color(t.done));
     return box(div().size(9).rounded_full().border(2).border_color(t.idle));
   }
 
@@ -227,7 +214,15 @@ export default class ThreadsAgents extends View {
     };
     // Same order as the threads list: this computer first, remote machines by name, projects in space order.
     const at = new Map(spaces().map((s, n) => [s.id, n]));
-    const mains = agentsHere.filter((p) => !underAnother(p.terminal)).sort((a, b) => {
+    const q = shared("threads.q") ?? "";
+    const matches = (p) => {
+      if (!q) return true;
+      const { tab, space } = tabs.get(p.tab);
+      // The sidebar's match rule: title, the lead agent's live title (its preview) and project.
+      const lead = allPanes.find((x) => x.tab === tab.id && x.terminal && x.program?.agent);
+      return `${threadTitle(tab, allPanes)} ${lead?.title ?? ""} ${space.name}`.toLowerCase().includes(q);
+    };
+    const mains = agentsHere.filter((p) => !underAnother(p.terminal) && matches(p)).sort((a, b) => {
       const A = tabs.get(a.tab).space, B = tabs.get(b.tab).space;
       return (A.machine ? 1 : 0) - (B.machine ? 1 : 0) || (A.machine ?? "").localeCompare(B.machine ?? "") || at.get(A.id) - at.get(B.id);
     });
@@ -272,9 +267,9 @@ export default class ThreadsAgents extends View {
     return { out, working };
   }
 
-  // A thread row: state, title and total time worked (kept by zerdr-sidebar, shared as
-  // "threads.worked"); under it, machine · project with the machine icon (display = this computer,
-  // server = remote), so where a working thread runs is always in view.
+  // A thread row, two lines: machine › project and the total time worked (kept by zerdr-sidebar,
+  // shared as "threads.worked") on top, so where a working thread runs is always in view; the
+  // title and its spinner below.
   threadRow(t, r) {
     const w = shared("threads.worked")?.[r.tabId];
     const ms = w ? w.acc + (w.since ? Date.now() - w.since : 0) : 0;
@@ -283,17 +278,15 @@ export default class ThreadsAgents extends View {
     const machine = r.space.machine;
     // The shown thread is highlighted here as in the threads list, so switching moves it between them.
     const on = r.tabId === focused()?.tab;
-    // Dim: a working thread recedes (muted title, faded line 2); brightness is kept for threads that need you.
+    // A working thread recedes (muted title) unless it is the one shown; `dim` alone keeps line 1 quiet at AA.
     const busy = ["working", "agents"].includes(r.phase ?? r.status);
     return this.slide.apply(div().id(`ag-${r.key}`), r.key).relative().flex_none().px(8).py(6).rounded(8).cursor_pointer()
       .when(!on, (el) => el.hover((s) => s.bg("#FFFFFF08")))
       .tooltip([r.name, `${machine ?? "This computer"} / ${r.space.name}`, "Focus"].join("\n"))
       .on_click(() => r.click())
-      // The state marker sits top right, on the title line; text starts flush left like the threads list.
       .child(h_flex().gap(8).items_center()
-        // Two-line card, as zerdr-sidebar: machine › project and time worked on top, title and spinner below.
         .child(v_flex().flex_1().min_w(0).gap(4)
-          .child(h_flex().gap(8).items_center().min_w(0).h(16).text_size(12).text_color(t.dim).opacity(busy ? 0.6 : 1)
+          .child(h_flex().gap(8).items_center().min_w(0).h(16).text_size(12).text_color(t.dim)
             .child(h_flex().flex_1().min_w(0).gap(5).items_center()
               .child(svg(`${ICONS}/${machine ? "server" : "monitor"}.svg`).size(12).flex_none())
               .child(div().flex_none().child(machine ?? "Local"))
@@ -301,16 +294,12 @@ export default class ThreadsAgents extends View {
               .child(div().min_w(0).truncate().text_color(t.muted).child(r.space.name)))
             .child(div().flex_none().tooltip("Time worked").child(worked)))
           .child(h_flex().gap(8).items_center().min_w(0)
-            .child(div().flex_1().min_w(0).truncate().text_size(13).font_medium().text_color(busy ? t.muted : t.foreground).child(r.name))
+            .child(div().flex_1().min_w(0).truncate().text_size(13).font_medium().text_color(busy && !on ? t.muted : t.foreground).child(r.name))
             .child(div().flex_none().child(this.marker(t, r.phase ?? r.status, r.key))))));
   }
 
   row(t, r) {
     if (r.depth === 0) return this.threadRow(t, r);
-    const pic = r.program?.icon && r.depth === 0
-      ? div().size(16).flex_none().rounded(5).border(1).border_color(t.input).bg(TILE).flex().items_center().justify_center()
-        .child(r.program.tint ? svg(r.program.icon).size(10).text_color(r.program.color ?? t.muted) : image(r.program.icon).size(10))
-      : null;
     // Two lines: title = agent name; subtitle = its terminal title, else program and space.
     const fb = r.fallback && clean(r.fallback) !== r.name ? clean(r.fallback) : "";
     const task = fb || r.where || "";
@@ -327,9 +316,7 @@ export default class ThreadsAgents extends View {
       .child(v_flex().gap(1)
         .child(h_flex().gap(8).items_center()
           .child(this.marker(t, r.depth === 0 ? r.phase ?? r.status : r.status === "working" ? "agents" : r.status, r.key))
-          .child(h_flex().flex_1().min_w(0).gap(6).items_center()
-            .when(Boolean(pic), (el) => el.child(pic))
-            .child(div().flex_1().min_w(0).truncate().text_size(13).font_semibold().text_color(t.foreground).child(r.name)))
+          .child(div().flex_1().min_w(0).truncate().text_size(13).font_semibold().text_color(t.foreground).child(r.name))
           .child(div().flex_none().text_size(12).text_color(t.dim).child(elapsed(r.since))))
         .child(div().pl(24).min_w(0).truncate().text_size(12).text_color(sub ? t.muted : t.dim).child(sub || "No task")));
   }
@@ -357,11 +344,12 @@ export default class ThreadsAgents extends View {
       .child(div().size(7).rounded_full().bg(color));
     const settings = this.ibtn("threads-settings", "settings", "Settings (Ctrl+,)", () => run("app.settings"));
     if (narrow()) return h_flex().flex_none().h(48).justify_center().items_center().bg(t.chrome).border_t(1).border_color(t.border).child(settings);
-    // Units named; the needs-you count only when there is one, and it jumps to that thread.
-    return h_flex().flex_none().px(16).py(12).gap(10).items_center().bg(t.chrome).border_t(1).border_color(t.border)
+    // Short labels so status + needs-you + settings fit a 272 px sidebar; the needs-you count shows
+    // only when there is one, and it jumps to that thread.
+    return h_flex().flex_none().px(16).py(12).gap(12).items_center().bg(t.chrome).border_t(1).border_color(t.border)
       .text_size(12).text_color(t.muted)
-      .child(h_flex().gap(6).items_center().child(dot(t.working)).child(`${working} ${working === 1 ? "thread" : "threads"} working`))
-      .when(needs.length > 0, (el) => el.child(h_flex().id("needs-jump").gap(6).items_center().text_color(t.blocked).cursor_pointer()
+      .child(h_flex().flex_none().gap(6).items_center().tooltip(`${working} ${working === 1 ? "thread" : "threads"} working`).child(dot(t.working)).child(`${working} working`))
+      .when(needs.length > 0, (el) => el.child(h_flex().id("needs-jump").flex_none().gap(6).items_center().text_color(t.blocked).cursor_pointer()
         .hover((s) => s.underline())
         .tooltip("Go to the thread that needs you")
         .on_click(() => {
@@ -369,26 +357,15 @@ export default class ThreadsAgents extends View {
           if (focused()?.space !== space.id) run("space.select", { id: space.id });
           run("tab.select", { id: tab.id });
         })
-        .child(dot(t.blocked)).child(`${needs.length} needs you →`)))
+        .child(dot(t.blocked)).child(`${needs.length} need${needs.length === 1 ? "s" : ""} you →`)))
       .child(div().flex_1())
       .child(settings);
-  }
-
-  // Bound keys only (keys.json), one line: Ctrl+Tab cycles threads, F2 renames. Both fit from
-  // 225px (the sidebar is kept at 229); narrower, the F2 hint goes rather than clip mid-word.
-  keys(t) {
-    const kbd = (k) => div().px(6).py(1).rounded(5).bg("#FFFFFF08").border(1).border_b(2).border_color("#FFFFFF1A")
-      .text_size(11).font_medium().text_color(t.muted).child(k);
-    const hint = (ks, what) => h_flex().gap(3).items_center().children([...ks.flatMap((k, i) => (i ? [div().child("+"), kbd(k)] : [kbd(k)])), div().ml(2).child(what)]);
-    return h_flex().flex_none().mx(16).mb(12).gap(8).items_center().whitespace_nowrap().overflow_hidden().text_size(11).text_color(t.dim)
-      .child(hint(["Ctrl", "Tab"], "next"))
-      .when((find(layout(), "sidebar")?.size?.px ?? 272) >= 225, (el) => el.child(hint(["F2"], "rename")));
   }
 
   list(t, out, working, cx) {
     const body = out.length
       ? out.map((r) => this.row(t, r))
-      : [div().px(8).py(4).text_size(12).text_color(t.dim).child("No agents working.")];
+      : [div().px(8).py(4).text_size(12).text_color(t.dim).child(shared("threads.q") ? "No working threads match." : "No agents working.")];
     return v_flex().flex_1().min_h(0).px(8).pt(4).pb(6).border_t(1).border_color(t.border)
       .child(h_flex().flex_none().px(8).pt(10).pb(6).gap(6).items_center().text_size(12).font_semibold().text_color(t.dim)
         .child(div().flex_1().min_w(0).truncate().child("Working"))
@@ -403,7 +380,7 @@ export default class ThreadsAgents extends View {
   // Resize only when the clamped size changes, so a resize never re-triggers itself.
   fit(out, listOnly) {
     const rows = Math.max(out.length, 1) * 53;
-    const px = Math.min(capPx(), Math.max(listOnly ? 60 : MIN_PX, 41 + rows + 10 + (listOnly ? 0 : 53 + 32)));
+    const px = Math.min(capPx(), Math.max(listOnly ? 60 : MIN_PX, 41 + rows + 10 + (listOnly ? 0 : 53)));
     const now = find(layout(), "agents")?.size?.px;
     if (px === this.sized) return;
     this.sized = px;
@@ -415,8 +392,8 @@ export default class ThreadsAgents extends View {
   body(cx) {
     const t = theme();
     const part = props()?.part;
-    // Footer block (the dock layout): status line and key hints, pinned to the sidebar's bottom.
-    if (part === "footer") return v_flex().id("root").size_full().bg(t.chrome).justify_end().child(this.footer(t)).when(!narrow(), (el) => el.child(this.keys(t)));
+    // Footer block (the dock layout): the status line, pinned to the sidebar's bottom.
+    if (part === "footer") return v_flex().id("root").size_full().bg(t.chrome).justify_end().child(this.footer(t));
     if (narrow()) return v_flex().id("root").size_full().bg(t.chrome).justify_end().when(part !== "list", (el) => el.child(this.footer(t)));
     const { out, working } = this.rows(t);
     // Publish the drawn thread order so zerdr-sidebar.next/prev walk this panel as shown.
@@ -425,6 +402,6 @@ export default class ThreadsAgents extends View {
     this.slide.plan(out.map((r) => r.key), 0, cx);
     if (part === "list") { this.fit(out, true); return v_flex().id("root").size_full().bg(t.chrome).child(this.list(t, out, working, cx)); }
     this.fit(out);
-    return v_flex().id("root").size_full().min_h(0).bg(t.chrome).child(this.list(t, out, working, cx)).child(this.footer(t)).child(this.keys(t));
+    return v_flex().id("root").size_full().min_h(0).bg(t.chrome).child(this.list(t, out, working, cx)).child(this.footer(t));
   }
 }
