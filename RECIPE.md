@@ -24,7 +24,7 @@ Left to right: a 272 px sidebar (`chrome` `#141416`, not draggable), then the wo
 - **Body:** padding 8 / 12 px, gap 12 px. The active tab's panes are drawn as cards: radius 12, 1 px `#ffffff14` border, `#ffffff3d` when focused, 8 px gap, framed even when alone. Terminal padding is 14 / 12 px.
 - **Right panel, 340 px (280–900), hidden by default:** a stack with Files (`zerdr-files`: a lazy file browser with read-only previews and rendered Markdown) and Changes (`zerdr-changes`: git diff with stage and commit). Both are drawn as the same card as the panes (radius 12, `#ffffff14` border). The Files path field shows the path's tail at rest (`…\code\project`) and the full path while you edit it; a status line shows only when the folder is pinned or the path is wrong.
 
-**Look:** base theme `ink`, with these overrides: `chrome #141416`, `canvas #000000`, `raised #151a21`, `selected #1d242d`, `border #23262c`, `foreground #eeeeef`, `muted #b4b7bd`, `dim #8a8f98`, `accent #3b82f6`, `working #14b8a6`, `blocked #f5b83d`, `done #d1d1d6`, `idle #6e6e73`. The UI font is Inter (bundled in `mods/zerdr-sidebar/fonts/`, SIL OFL).
+**Look:** base theme `ink`, with these overrides: `chrome #141416`, `canvas #000000`, `raised #151a21`, `selected #1d242d`, `border #23262c`, `foreground #eeeeef`, `muted #b4b7bd`, `dim #8a8f98`, `accent #3b82f6`, `working #14b8a6`, `blocked #f5b83d`, `done #22c55e`, `idle #6e6e73`. The UI font is Inter (bundled in `mods/zerdr-sidebar/fonts/`, SIL OFL).
 
 ## How it behaves
 
