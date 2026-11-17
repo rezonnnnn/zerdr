@@ -17,14 +17,11 @@ function find(node, id) {
 
 // The rail goes by width, as workspace-chrome's does; same shared keys so both agree.
 const narrow = () => (find(layout(), "sidebar")?.size?.px ?? Infinity) < 160;
-// Sidebar fold: zerdr-viz resizes the sidebar once per toggle (each width step resized the
-// terminal, and the agent in it redrew its whole screen per step). Smoothness comes from here
-// instead: shared "sidebar.phase" is leaving (fade out, 12 px drift, 120 ms) -> arriving (one
-// frame hidden at the new width) -> idle (fade in, 180 ms). Native transitions only.
+// Sidebar fold: as zerdr-sidebar (keep the copies in step). "sidebar.phase" leaving slides the
+// content out (200 ms ease-in) -> arriving (one frame hidden at the new width) -> idle (slides
+// back in, 260 ms ease-out). Native transitions only.
 const settle = (el) => {
   const p = shared("sidebar.phase") ?? "idle";
-  // Slide (2026-11-16): content travels its full width (leaving 200 ms ease-in, idle 260 ms ease-out);
-  // the layout still resizes once per toggle, so the terminal reflows once.
   const spec = p === "idle" ? { duration: 260, easing: "ease-out" } : p === "leaving" ? { duration: 200, easing: "ease-in" } : 1;
   const off = -(shared("sidebar.width") ?? 272);
   // The offset must sit on a child: Herdr places a mod's root element itself and ignores its left.
@@ -33,8 +30,8 @@ const settle = (el) => {
 };
 // Collapse/expand: one layout.resize per toggle, so the terminal reflows once. Stepping the width
 // (the old 200 ms slide) resized the terminal ~12 times and the agent in it redrew per step: lag.
-// The motion is the content's (settle(), above): collapse fades out, then resizes; expand resizes
-// hidden, then fades in. Toggles during the 140 ms handover are ignored.
+// The motion is the content's (settle(), above): collapse slides out (200 ms), then resizes; expand
+// resizes hidden, then slides in (260 ms). Toggles during the handover are ignored.
 let busy = false;
 function toggleSidebar(cx) {
   if (busy) return;
@@ -64,28 +61,32 @@ export default class ThreadsViz extends View {
   // colour (art/blob-*.png), each drifting on its own path, over the
   // mid blue. Grain sits on top, then a chrome alpha ramp, so the art
   // thins out towards the search box (herdr has no CSS mask; chrome over art is the same picture).
-  // The header follows the aggregate thread state. It drifts at half speed when nothing is working,
-  // and an amber layer fades in when a thread needs you. The ids are keyed by state, so the loops
-  // remount with their new periods. Native loops and transitions only; no timers.
+  // The header follows the aggregate thread state: working = the blobs drift at full strength;
+  // idle = they hold still at 35% (nothing to report, nothing moving); a thread needs you = an
+  // amber layer fades in. The blob ids are keyed by state, so the loops remount or stop.
+  // Native loops and transitions only; no timers.
   mesh(mode, blocked) {
-    const slow = mode === "idle" ? 2 : 1;
+    const live = mode === "active";
     const blob = (name, size, x, y, px, py) => div().id(`blob-${name}-${mode}`).absolute().size(size)
       .left(x[0]).top(y[0])
-      .loop("left", { from: x[0], to: x[1], period: px * slow }).loop("top", { from: y[0], to: y[1], period: py * slow })
+      .when(live, (el) => el.loop("left", { from: x[0], to: x[1], period: px }).loop("top", { from: y[0], to: y[1], period: py }))
       .child(image(`mods/zerdr-viz/art/blob-${name}.png`).size_full());
     const over = (file) => image(`mods/zerdr-viz/art/${file}`).absolute().top(0).left(0).size_full();
     return div().absolute().top(0).left(0).size_full().overflow_hidden().bg("#2a5fb0")
-      .child(div().id(`blobs-${mode}`).absolute().top(0).left(0).size_full()
+      // Stable id for the dim, so idle <-> working fades (1.2 s) instead of snapping.
+      .child(div().id("blobs-dim").absolute().top(0).left(0).size_full()
+        .opacity(live ? 1 : 0.35).transition("opacity", { duration: 1200, easing: "ease-out" })
+        .child(div().id(`blobs-${mode}`).absolute().top(0).left(0).size_full()
         .child(blob("blue", 210, [-50, 130], [-60, -30], 13000, 9000))
         .child(blob("indigo", 200, [120, -70], [-90, -50], 11000, 7600))
         .child(blob("teal", 160, [160, -10], [-10, -70], 9400, 6800))
         .child(blob("violet", 180, [30, 220], [-40, -70], 12400, 8200))
-        .child(blob("black", 160, [200, 50], [-80, -50], 15000, 10400).opacity(0.55)))
+        .child(blob("black", 160, [200, 50], [-80, -50], 15000, 10400).opacity(0.55))))
       // Stable id: only its opacity target changes, so the transition runs instead of a remount.
       .child(div().id("blob-amber").absolute().top(0).left(0).size_full()
         .opacity(blocked ? 0.55 : 0).transition("opacity", { duration: 1200, easing: "ease-out" })
         .child(div().id(`amber-${mode}`).absolute().size(190).left(50).top(-50)
-          .loop("left", { from: 50, to: 240, period: 7000 * slow }).loop("top", { from: -50, to: -80, period: 5200 * slow })
+          .when(live, (el) => el.loop("left", { from: 50, to: 240, period: 7000 }).loop("top", { from: -50, to: -80, period: 5200 }))
           .child(image("mods/zerdr-viz/art/blob-amber.png").size_full())))
       .child(over("grain.png"))
       .child(this.fade());
