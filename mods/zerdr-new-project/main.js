@@ -3,12 +3,12 @@
 // A named space keeps its name; an unnamed one is called after its folder. With neither,
 // space.new would open a copy of the current space under the same folder name, so Create
 // waits for one of them. The folder defaults to where the focused terminal is.
-// The project is also saved (shared "projects": [{name, folder}]) so zerdr-sidebar keeps
+// The project is also saved (shared "projects": [{name, folder, machine?}]) so zerdr-sidebar keeps
 // listing it after its space closes; starting a thread there makes the space again.
 
 import { View, div, svg } from "gpui-kit";
 import { h_flex, v_flex, InputState, Input } from "gpui-base";
-import { theme, run, closeOverlay, props, focused, pickFolder, shared, setShared } from "herdr";
+import { theme, run, closeOverlay, props, focused, spaces, pickFolder, shared, setShared } from "herdr";
 
 const ICONS = "mods/workspace-chrome";
 const PROJECTS = "projects";
@@ -19,6 +19,8 @@ export default class NewProject extends View {
   init(_props, cx) {
     this.folder = null;
     this.name = InputState.new({ placeholder: "e.g. Rooms dashboard" });
+    // New thread's "Create “x”…" passes the unmatched search as the name.
+    if (props()?.name) this.name.set_value(props().name);
     this.name.on("change", (_e, cx) => cx.notify());
     this.name.on("submit", (_e, cx) => this.create(cx));
     this.name.focus();
@@ -30,11 +32,17 @@ export default class NewProject extends View {
     if (!this.ready()) return;
     const name = this.name.value().trim() || undefined;
     closeOverlay(props().overlay);
-    run("space.new", { name, folder: this.folder ?? undefined });
-    const folder = this.folder ?? focused()?.cwd;
+    // A chosen folder comes from this computer's picker; otherwise the project is where the
+    // focused terminal is, on that space's machine. space.new from a mod without `machine` follows
+    // the focused space's machine, so always name it ("" = this computer) or a folder from one
+    // machine is opened on the other and fails to start.
+    const here = focused();
+    const machine = this.folder ? null : spaces().find((s) => s.id === here?.space)?.machine ?? null;
+    const folder = this.folder ?? here?.cwd ?? undefined;
+    run("space.new", { name, folder, machine: machine ?? "" });
     if (folder) {
-      const saved = (shared(PROJECTS) ?? []).filter((p) => key(p.folder) !== key(folder));
-      setShared(PROJECTS, [...saved, { name: name ?? base(folder), folder }]);
+      const saved = (shared(PROJECTS) ?? []).filter((p) => !(key(p.folder) === key(folder) && (p.machine ?? null) === machine));
+      setShared(PROJECTS, [...saved, { name: name ?? base(folder), folder, ...(machine ? { machine } : {}) }]);
     }
   }
 
