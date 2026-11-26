@@ -4,16 +4,27 @@
 // Archive = tab.settle; archived threads sit in a folded "Archived" section at the bottom.
 // Opening one brings it back (Herdr unsettles a shown tab); hover offers Unarchive (tab.unsettle).
 
-import { View, div, svg, image } from "gpui-kit";
+import { View, div, svg, image, PathBuilder, Background } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { spaces, panes, agents, terminals, focused, run, theme, layout, setAgentOrder, openOverlay, nextCommand, setShared, shared, hc } from "herdr";
 import { Press } from "./press.js";
 
 const ICONS = "mods/workspace-chrome";
 const BRANCH = "mods/zerdr-header/icons/branch.svg";
-const ROW_PX = 56; // a thread row: two lines (title / branch + harness)
-// Dock sizing (fit): search row (mt 8 + 32 + mb 6), list padding (pt 4 + pb 8), floor, header.
-const HEAD_PX = 46, LIST_PAD = 12, MIN_PX = 60, VIZ_PX = 60;
+const ROW_PX = 50; // a thread row: two lines (title / branch + harness)
+// One grid: a thread's title starts where its project's name does (header px 8 + 14 icon + 6 gap),
+// and the unread dot sits in that indent. Every marker, logo and count shares the 16 px right column.
+const INDENT = 28;
+// Neutral fills over `chrome`: hover, and the shown thread's selection (with a 1 px inner ring).
+// HOVER_FILL / SEL_FILL are the same fills flattened, for the gradient under the hover actions.
+const HOVER = "#FFFFFF08", SEL = "#FFFFFF0F", RING = "#FFFFFF0A", HAIR = "#FFFFFF0F";
+const HOVER_FILL = "#1b1b1d", SEL_FILL = "#222224";
+const RECT = () => PathBuilder.fill().move_to("0%", "0%").line_to("100%", "0%").line_to("100%", "100%").line_to("0%", "100%").close().build();
+// A layer filling its parent that fades from clear (left) to `color`, solid from `at` (0-1) on.
+const fade = (color, at) => globalThis.window.paint_path(RECT(),
+  Background.linear_gradient(90, Background.stop(color + "00", 0), Background.stop(color, at))).absolute().top(0).left(0).size_full();
+// Dock sizing (fit): search row (mt 8 + 30 + mb 6), list padding (pt 4 + pb 8), floor, header.
+const HEAD_PX = 44, LIST_PAD = 12, MIN_PX = 60, VIZ_PX = 60;
 // The light braille "dots" spinner (2-4 of 6 dots lit): it reads as motion. The 8-dot set with 7 lit
 // read as a drag grip, and any frame with a full column (⠇ ⠸ ⠧ ⠏) reads as a kebab menu at 15 px.
 // This set never fills a column: 3 or 4 dots, always spread over both.
@@ -178,11 +189,12 @@ class Glide {
       .opacity(s === 2 ? 1 : 0)
       .transition("opacity", s === 2 ? { duration: 160, easing: "ease-out" } : s === 3 ? { duration: 600, easing: "ease-in-out" } : 1);
     const hl = div().id("glide-hl").absolute().left(0).w_full().top(s === 1 ? this.top + 4 * this.from : this.top).h(this.h).rounded(8).bg(color)
+      .border(1).border_color(RING)
       .opacity(on && s !== 1 ? 1 : 0)
       .transition("top", spec).transition("height", spec).transition("opacity", fade)
       .when(Boolean(stamp), (el) => el.child(stamp));
     const g = this.ghost;
-    const ghost = g && div().id(`glide-ghost-${this.arrival}`).absolute().left(0).w_full().top(g.top).h(g.h).rounded(8).bg(color)
+    const ghost = g && div().id(`glide-ghost-${this.arrival}`).absolute().left(0).w_full().top(g.top).h(g.h).rounded(8).bg(color).border(1).border_color(RING)
       .opacity(s === 1 ? 1 : 0).transition("opacity", s === 1 ? 1 : { duration: 140, easing: "ease-out" });
     return div().absolute().top(0).left(0).size_full().when(Boolean(ghost), (el) => el.child(ghost)).child(hl);
   }
@@ -200,6 +212,8 @@ export default class ThreadsSidebar extends View {
     this.listH = 600;
     this.glide = new Glide(1); // the Agents panel is below
     try { this.folded = new Set(JSON.parse(localStorage.getItem("folded") ?? "[]")); } catch { this.folded = new Set(); }
+    try { this.foldedM = new Set(JSON.parse(localStorage.getItem("foldedM") ?? "[]")); } catch { this.foldedM = new Set(); }
+    this.hoverHead = null; // the header under the mouse: shows its fold chevron and actions
     this.archivedOpen = localStorage.getItem("archivedOpen") === "1";
     // Needs-you threads already looked at: { tab: changed_at when seen }. A new ask (changed_at moves) shows the dot again.
     try { this.seenAsk = JSON.parse(localStorage.getItem("seenAsk") ?? "{}") ?? {}; } catch { this.seenAsk = {}; }
@@ -299,7 +313,7 @@ export default class ThreadsSidebar extends View {
     // only the threads it draws.
     const rank = new Map((shared("agents.order") ?? []).map((id, n) => [id, n]));
     const shown = (rank.size ? working.filter((i) => rank.has(i.tab.id)) : [...working]).sort((a, b) => (rank.get(a.tab.id) ?? 1e9) - (rank.get(b.tab.id) ?? 1e9));
-    const nav = [...done.filter((i) => !this.folded.has(i.space.id)), ...shown];
+    const nav = [...done.filter((i) => !this.folded.has(i.space.id) && !this.foldedM.has(i.space.machine ?? "")), ...shown];
     return { working, done, archived, order: [...working, ...done], nav };
   }
 
@@ -343,87 +357,95 @@ export default class ThreadsSidebar extends View {
     return box(div().size(9).rounded_full().border(2).border_color(t.idle));
   }
 
-  // Header action: bare icon, dim until hovered.
-  hbtn(id, icon, tip, onClick) {
+  // Ghost action: bare icon, dim until hovered, then a fill. 28 px in the search row, 22 on rows and headers.
+  hbtn(id, icon, tip, onClick, size = 28) {
     const t = theme();
-    return this.press.wire(div().id(id).size(24).flex_none().flex().items_center().justify_center().rounded(6)
+    return this.press.wire(div().id(id).size(size).flex_none().flex().items_center().justify_center().rounded(size > 24 ? 7 : 5)
       .text_color(t.dim).cursor_pointer()
       .hover((s) => s.bg("#FFFFFF12").text_color(t.foreground))
       .tooltip(tip)
       .on_click((_e, cx) => { cx.stop_propagation(); onClick(cx); })
-      .child(this.press.icon(id, svg(`${ICONS}/${icon}.svg`), 15)), id);
-  }
-
-  // The one icon-button style: round, input-coloured ring, muted icon.
-  ibtn(id, icon, tip, size, onClick) {
-    const t = theme();
-    return this.press.wire(div().id(id).size(size).flex_none().flex().items_center().justify_center().rounded_full()
-      .border(1).border_color(t.input).text_color(t.muted).cursor_pointer()
-      .hover((s) => s.bg("#FFFFFF12").text_color(t.foreground))
-      .tooltip(tip)
-      .on_click((_e, cx) => { cx.stop_propagation(); onClick(cx); })
-      .child(this.press.icon(id, svg(`${ICONS}/${icon}.svg`), 12)), id);
+      .child(this.press.icon(id, svg(`${ICONS}/${icon}.svg`), size > 24 ? 15 : 13)), id);
   }
 
   select(space, tab) {
     run("tab.select", { id: tab.id }); // switches project too, in one step (space.select first glided twice)
   }
 
-  // Machine header: icon and name (this computer = display, remote = server).
-  machineHead(t, machine, key) {
-    return this.slide.apply(div().id(`hm-${key}`), key).relative().flex_none().my(2).h(24).px(8).pt(6)
-      .flex().items_center().gap(6).text_size(11).font_medium().text_color(t.dim)
-      // The icon sits on the 16px edge with the thread titles; display = this computer, server = remote.
-      .tooltip(machine ? `Remote machine: ${machine}` : "This computer")
-      .child(svg(`${ICONS}/${machine ? "server" : "monitor"}.svg`).size(13).flex_none())
-      .child(div().truncate().child(machine ?? "This computer"));
+  // Headers track the mouse: the one under it shows its fold chevron and actions.
+  hoverable(el, key) {
+    return el.on_hover((h, cx) => {
+      if (h) this.hoverHead = key; else if (this.hoverHead === key) this.hoverHead = null;
+      cx.notify();
+    });
   }
 
-  // Project header: a disclosure group with its thread count; click folds it (kept across restarts).
+  // Section header (a machine, Archived): small and faint, so the threads lead. Name and count; the
+  // fold chevron shows on hover, and stays while folded. Click folds it (kept across restarts).
+  section(t, id, key, label, n, shut, tip, onToggle) {
+    const hov = this.hoverHead === key;
+    return this.hoverable(this.slide.apply(div().id(id), key), key).relative().flex_none().my(2).h(26).px(8).rounded(6)
+      .flex().items_center().gap(4).cursor_pointer().text_size(12).font_medium()
+      .text_color(hov ? t.muted : t.idle)
+      .hover((s) => s.bg(HOVER))
+      .tooltip(tip)
+      .on_click((_e, cx) => { onToggle(); cx.notify(); })
+      .child(div().min_w(0).truncate().child(label))
+      .child(div().flex_none().text_color(t.idle).child(String(n)))
+      .when(hov || shut, (el) => el.child(svg(`${ICONS}/${shut ? "chevron-right" : "chevron-down"}.svg`).size(12).flex_none()));
+  }
+
+  machineHead(t, machine, n, key) {
+    const m = machine ?? "";
+    const shut = this.foldedM.has(m);
+    return this.section(t, `hm-${key}`, key, machine ?? "This computer", n, shut,
+      machine ? `Remote machine: ${machine}` : "This computer", () => {
+        if (shut) this.foldedM.delete(m); else this.foldedM.add(m);
+        localStorage.setItem("foldedM", JSON.stringify([...this.foldedM]));
+      });
+  }
+
+  // Project header: folder icon, name, count; click folds it (kept across restarts). On hover the
+  // icon turns into the fold chevron and the count gives way to "New thread here". Folded, the
+  // chevron stays, and the needs-you marker shows when a thread inside needs you.
   spaceHead(t, space, n, key, needs) {
     const shut = this.folded.has(space.id);
-    return this.slide.apply(div().id(`hs-${space.id}`), key).relative().flex_none().my(2).h(26).px(8).rounded(6)
+    const hov = this.hoverHead === key;
+    return this.hoverable(this.slide.apply(div().id(`hs-${space.id}`), key), key).relative().flex_none().my(2).h(28).px(8).rounded(6)
       .flex().items_center().gap(6).cursor_pointer()
-      .hover((s) => s.bg("#FFFFFF08"))
+      .hover((s) => s.bg(HOVER))
       .tooltip(shut ? "Show threads" : "Hide threads")
       .on_click((_e, cx) => {
         if (shut) this.folded.delete(space.id); else this.folded.add(space.id);
         localStorage.setItem("folded", JSON.stringify([...this.folded]));
         cx.notify();
       })
-      // As the machine header: a folder icon on the 16px edge, the name beside it, one step bolder
-      // (12px semibold, foreground); count, then the fold chevron, at the right.
-      .child(svg(`${ICONS}/folder.svg`).size(13).flex_none().text_color(t.dim))
-      .child(div().flex_1().min_w(0).truncate().text_size(12).font_semibold().text_color(t.foreground).child(space.name))
-      // Folded over a thread that needs you: the needs-you marker stays in view.
+      .child(div().size(14).flex_none().flex().items_center().justify_center().text_color(hov ? t.muted : t.idle)
+        .child(hov || shut ? svg(`${ICONS}/${shut ? "chevron-right" : "chevron-down"}.svg`).size(12) : svg(`${ICONS}/folder.svg`).size(13)))
+      .child(div().flex_1().min_w(0).truncate().text_size(13).font_medium().text_color(hov ? t.foreground : t.muted).child(space.name))
       .when(shut && Boolean(needs), (el) => el.child(div().tooltip("A thread in here needs you").child(this.marker(t, "blocked", `fold-${space.id}`))))
-      .child(div().flex_none().text_size(12).text_color(t.dim).child(String(n)))
-      .child(svg(`${ICONS}/${shut ? "chevron-right" : "chevron-down"}.svg`).size(12).flex_none().text_color(t.dim));
+      .child(div().min_w(16).h(22).flex_none().flex().items_center().justify_center()
+        .child(hov ? this.hbtn(`new-in-${space.id}`, "square-pen", "New thread here",
+          () => openOverlay({ mod: "zerdr-new-thread", kind: "dialog", width: 540, height: 400, props: { space: space.id } }), 22)
+          : div().text_size(12).text_color(t.idle).child(String(n))));
   }
 
-  // Archived header: the project header's shape with the archive icon; click folds it (kept across restarts).
   archivedHead(t, n, key) {
     const open = this.archivedOpen;
-    return this.slide.apply(div().id("ha-archived"), key).relative().flex_none().mt(10).mb(2).h(26).px(8).rounded(6)
-      .flex().items_center().gap(6).cursor_pointer()
-      .hover((s) => s.bg("#FFFFFF08"))
-      .tooltip(open ? "Hide archived threads" : "Show archived threads")
-      .on_click((_e, cx) => {
+    return this.section(t, "ha-archived", key, "Archived", n, !open,
+      open ? "Hide archived threads" : "Show archived threads", () => {
         this.archivedOpen = !open;
         localStorage.setItem("archivedOpen", this.archivedOpen ? "1" : "0");
-        cx.notify();
-      })
-      .child(svg(`${ICONS}/archive.svg`).size(13).flex_none().text_color(t.dim))
-      .child(div().flex_1().min_w(0).truncate().text_size(12).font_semibold().text_color(t.dim).child("Archived"))
-      .child(div().flex_none().text_size(12).text_color(t.dim).child(String(n)))
-      .child(svg(`${ICONS}/${open ? "chevron-down" : "chevron-right"}.svg`).size(12).flex_none().text_color(t.dim));
+      }).mt(10);
   }
 
-  // Two lines. Top: title and the state marker (right), so markers line up in one column with the
-  // Working cards' spinners. Bottom: the git branch (left), time worked and the agent harness's logo. Machine and project
-  // are said once, in the headers above. The marker is the shared one (needs-you amber dot, done check) and fades to 50% once
-  // the thread has been looked at. Hover lays Rename / Archive over the row's right end on the
-  // raised fill, so nothing in the row moves or re-truncates.
+  // Two lines on one grid. Top: title (13 px medium, from the project name's edge) and the state
+  // marker in the shared right column, level with the Working cards' spinners. Bottom: the git
+  // branch, time worked and the harness logo, a step fainter. Machine and project are said once, in
+  // the headers above. Unread (a new ask, or finished and not opened) is a blue dot in the indent,
+  // never a bolder title, so nothing reflows when it is read; the marker fades to 50% once seen.
+  // Hover lays Rename / Archive over the row's right end on a gradient of the row's own fill, so
+  // the title tucks under without a hard edge and nothing re-truncates.
   row(t, item, shownTab) {
     const { tab, space, d } = item;
     const on = tab.id === shownTab;
@@ -436,10 +458,10 @@ export default class ThreadsSidebar extends View {
     const fresh = ask || unseen;
     const mark = d.phase === "blocked" || d.phase === "done" ? d.phase : null;
     const tip = d.phase === "blocked" ? `Needs you · ${fmtAgo(tab.changed_at)}` : ms ? `Last active ${fmtAgo(tab.changed_at)}` : "Not started";
-    const btn = (id, icon, label, cmd) => this.ibtn(id, icon, label, 22, (cx) => { run(cmd, { id: tab.id }); done(); cx.notify(); }).bg(t.raised);
-    return this.slide.apply(div().id(`th-${tab.id}`), tab.id).relative().flex_none().my(2).px(8).h(ROW_PX).rounded(8)
-      .flex().flex_col().justify_center().gap(5).cursor_pointer()
-      .when(!on, (el) => el.hover((s) => s.bg("#FFFFFF08")))
+    const btn = (id, icon, label, cmd) => this.hbtn(id, icon, label, (cx) => { run(cmd, { id: tab.id }); done(); cx.notify(); }, 22);
+    return this.slide.apply(div().id(`th-${tab.id}`), tab.id).relative().flex_none().my(2).pl(INDENT).pr(8).h(ROW_PX).rounded(8)
+      .flex().flex_col().justify_center().gap(3).cursor_pointer()
+      .when(!on, (el) => el.hover((s) => s.bg(HOVER)))
       .tooltip([d.title, where, PHASE_TIP[d.phase], tip].filter(Boolean).join("\n"))
       .on_hover((h, cx) => {
         if (h) this.hovered = tab.id;
@@ -447,10 +469,11 @@ export default class ThreadsSidebar extends View {
         cx.notify();
       })
       .on_click(() => this.select(space, tab))
+      .child(div().id(`unread-${tab.id}`).absolute().left(11).top(13).size(6).rounded_full().bg(t.accent)
+        .opacity(fresh ? 1 : 0).transition("opacity", { duration: 600, easing: "ease-out" }))
       .child(h_flex().items_center().gap(8)
-      .child(div().flex_1().min_w(0).truncate().text_size(14).text_color(t.foreground)
-        .when(fresh, (el) => el.font_semibold())
-        .when(!fresh, (el) => el.font_medium())
+      .child(div().flex_1().min_w(0).truncate().text_size(13).font_medium()
+        .text_color(on || fresh ? t.foreground : t.muted)
         .child(d.title))
       .when(Boolean(mark), (el) => el.child(div().id(`dot-${tab.id}`).flex_none().opacity(fresh ? 1 : 0.5)
         .transition("opacity", { duration: 1200, easing: "ease-out" })
@@ -458,12 +481,16 @@ export default class ThreadsSidebar extends View {
         .child(this.marker(t, mark, tab.id)))))
       .child(h_flex().h(16).items_center().gap(8)
         .child(this.branch(t, d))
-        .when(ms > 0, (el) => el.child(div().flex_none().text_size(12).text_color(t.dim).tooltip("Time worked").child(fmtWorked(ms))))
+        .when(ms > 0, (el) => el.child(div().flex_none().text_size(12).text_color(t.idle).tooltip("Time worked").child(fmtWorked(ms))))
         .child(this.harness(t, d, tab.id)))
-      .when(hover, (el) => el.child(h_flex().absolute().right(0).top(0).h_full().items_center().gap(4).pl(8).pr(5).bg(t.raised).rounded_r(8)
-        .when(Boolean(tab.settled), (x) => x.child(btn(`unarc-${tab.id}`, "archive", "Unarchive", "tab.unsettle")))
-        .when(!tab.settled, (x) => x.child(btn(`ren-${tab.id}`, "square-pen", "Rename (F2)", "tab.rename"))
-          .child(btn(`arc-${tab.id}`, "archive", "Archive", "tab.settle")))));
+      // The gradient is painted, and paint ignores rounded clipping, so it is inset 4 px from the
+      // row's edges to stay inside its 8 px corners; the strip outside it is the row's own fill.
+      .when(hover, (el) => el.child(div().absolute().right(0).top(0).h_full().w(88)
+        .child(div().absolute().top(4).bottom(4).left(0).right(4).child(fade(on ? SEL_FILL : HOVER_FILL, 0.4)))
+        .child(h_flex().absolute().right(0).top(0).h_full().items_center().justify_end().gap(1).pr(5)
+          .when(Boolean(tab.settled), (x) => x.child(btn(`unarc-${tab.id}`, "archive", "Unarchive", "tab.unsettle")))
+          .when(!tab.settled, (x) => x.child(btn(`ren-${tab.id}`, "square-pen", "Rename (F2)", "tab.rename"))
+            .child(btn(`arc-${tab.id}`, "archive", "Archive", "tab.settle"))))));
   }
 
   // Bottom line, right end: the agent harness's logo in the marker's 16 px column (its name as the
@@ -471,24 +498,24 @@ export default class ThreadsSidebar extends View {
   harness(t, d, key) {
     const prog = d.program?.agent ? d.program : null;
     if (!prog) return div();
-    const glyph = prog.tint ? svg(prog.icon).size(14).text_color(t.dim) : image(prog.icon).size(14);
+    const glyph = prog.tint ? svg(prog.icon).size(14).text_color(t.idle) : image(prog.icon).size(14);
     return div().id(`harness-${key}`).flex_none().min_w(16).h(16).flex().items_center().justify_center()
-      .max_w(110).truncate().text_size(12).text_color(t.dim).tooltip(prog.name)
+      .max_w(110).truncate().text_size(12).text_color(t.idle).tooltip(prog.name)
       .child(prog.icon ? glyph : prog.name);
   }
 
   // Bottom line, left: branch icon + branch (empty when the thread is on none).
   branch(t, d) {
-    return h_flex().flex_1().min_w(0).items_center().gap(5).text_size(12).text_color(t.dim)
-      .when(Boolean(d.branch), (el) => el.child(svg(BRANCH).size(14).flex_none())
+    return h_flex().flex_1().min_w(0).items_center().gap(5).text_size(12).text_color(t.idle)
+      .when(Boolean(d.branch), (el) => el.child(svg(BRANCH).size(12).flex_none())
         .child(div().min_w(0).truncate().child(d.branch)));
   }
 
   rail(t, items, shownTab) {
     return v_flex().id("root").size_full().bg(t.chrome).items_center().pt(8).gap(4)
       .children(items.map(({ tab, space, d }) => div().id(`rail-${tab.id}`).size(28).flex_none().flex().items_center().justify_center().rounded(6)
-        .when(tab.id === shownTab, (el) => el.bg(t.selected))
-        .hover((s) => s.bg("#FFFFFF08"))
+        .when(tab.id === shownTab, (el) => el.bg(SEL))
+        .hover((s) => s.bg(HOVER))
         .tooltip([`${d.title} · ${space.name}`, PHASE_TIP[d.phase]].filter(Boolean).join("\n"))
         .on_click(() => this.select(space, tab))
         .child(this.marker(t, d.phase, `rail-${tab.id}`))));
@@ -524,7 +551,11 @@ export default class ThreadsSidebar extends View {
     let lastM = null, lastS = null;
     for (const i of done) {
       const mk = `m:${i.space.machine ?? ""}`;
-      if (mk !== lastM) { lastM = mk; lastS = null; plan.push({ key: mk, head: "m", machine: i.space.machine ?? null }); }
+      if (mk !== lastM) {
+        lastM = mk; lastS = null;
+        plan.push({ key: mk, head: "m", machine: i.space.machine ?? null, n: done.filter((x) => (x.space.machine ?? "") === (i.space.machine ?? "")).length });
+      }
+      if (this.foldedM.has(i.space.machine ?? "")) continue; // a folded machine keeps only its header
       if (i.space.id !== lastS) {
         lastS = i.space.id;
         const mine = done.filter((x) => x.space.id === i.space.id);
@@ -538,9 +569,9 @@ export default class ThreadsSidebar extends View {
     }
     this.slide.plan(plan.map((p) => p.key), 4, cx); // rows and headers carry my(2)
     // Dock: size the block to its rows' measured heights (estimates until measured), each with my(2).
-    const est = (p) => this.slide.h.get(p.key) ?? (p.head === "m" ? 24 : p.head ? 26 : ROW_PX);
+    const est = (p) => this.slide.h.get(p.key) ?? (p.head === "s" ? 28 : p.head ? 26 : ROW_PX);
     this.fit(HEAD_PX + LIST_PAD + plan.reduce((n, p) => n + est(p) + 4, 0));
-    const rows = plan.map((p) => p.head === "m" ? this.machineHead(t, p.machine, p.key)
+    const rows = plan.map((p) => p.head === "m" ? this.machineHead(t, p.machine, p.n, p.key)
       : p.head === "s" ? this.spaceHead(t, p.space, p.n, p.key, p.needs)
       : p.head === "a" ? this.archivedHead(t, p.n, p.key) : this.row(t, p.item, shownTab));
     if (q && !order.length && !archived.length) {
@@ -552,29 +583,32 @@ export default class ThreadsSidebar extends View {
           .on_click((_e, cx) => this.clearSearch(cx)).child("Clear search")));
     }
 
-    // Header: flat search, then new project (a space) / new thread.
-    const search = h_flex().id("search").relative().h(32).gap(8).items_center()
+    // Header: a search field (a quiet filled control; its ring brightens on hover), then new project
+    // (a space) and new thread as ghost buttons.
+    const field = h_flex().id("search").relative().flex_1().min_w(0).h(30).pl(9).pr(4).gap(8).items_center().rounded(7)
+      .bg("#FFFFFF06").border(1).border_color(HAIR).hover((s) => s.border_color("#FFFFFF1A"))
       .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
       .on_key_down((e, cx) => { if (e.key === "escape" && this.q) { cx.stop_propagation(); this.clearSearch(cx); } })
-      .child(div().size(16).flex_none().flex().items_center().justify_center().child(svg(`${ICONS}/search.svg`).size(14).text_color(t.dim)))
-      .child(Input.new(this.input).flex_1().h_full().text_size(13).font_medium().text_color(t.foreground))
-      .when(Boolean(q), (el) => el.child(div().id("search-clear").size(20).flex_none().flex().items_center().justify_center().rounded_full()
+      .child(svg(`${ICONS}/search.svg`).size(14).flex_none().text_color(t.dim))
+      .child(Input.new(this.input).flex_1().h_full().text_size(13).text_color(t.foreground))
+      .when(Boolean(q), (el) => el.child(div().id("search-clear").size(20).flex_none().flex().items_center().justify_center().rounded(5)
         .text_color(t.dim).cursor_pointer().hover((s) => s.bg("#FFFFFF14").text_color(t.foreground))
         .tooltip("Clear search (Esc)")
         .on_click((_e, cx) => this.clearSearch(cx))
-        .child(svg(`${ICONS}/x.svg`).size(12))))
-      .child(h_flex().flex_none().gap(2).items_center()
-        // New project: a dialog for its name and, optionally, its folder (mods/zerdr-new-project).
-        .child(this.hbtn("new-space", "folder-plus", "New project",
-          () => openOverlay({ mod: "zerdr-new-project", kind: "dialog", width: 340, height: 236 })))
-        .child(this.hbtn("zerdr-new-thread", "square-pen", "New thread (Ctrl+Shift+T)",
-          () => openOverlay({ mod: "zerdr-new-thread", kind: "dialog", width: 540, height: 400, props: { space: focused()?.space } }))));
+        .child(svg(`${ICONS}/x.svg`).size(12))));
+    const search = h_flex().gap(2).items_center()
+      .child(field)
+      // New project: a dialog for its name and, optionally, its folder (mods/zerdr-new-project).
+      .child(this.hbtn("new-space", "folder-plus", "New project",
+        () => openOverlay({ mod: "zerdr-new-project", kind: "dialog", width: 340, height: 236 })))
+      .child(this.hbtn("zerdr-new-thread", "square-pen", "New thread (Ctrl+Shift+T)",
+        () => openOverlay({ mod: "zerdr-new-thread", kind: "dialog", width: 540, height: 400, props: { space: focused()?.space } })));
 
     return v_flex().id("root").size_full().min_h(0).bg(t.chrome).text_size(13)
-      .child(div().flex_none().mx(16).mt(8).mb(6).child(search))
+      .child(div().flex_none().mx(8).mt(8).mb(6).child(search))
       .child(v_flex().id("threads-list").flex_1().min_h(0).px(8).pt(4).pb(8).overflow_y_scrollbar().on_size_change((s) => { this.listH = s.height; })
         .child(v_flex().relative().flex_none().w_full()
-          .child(this.glide.el(this.slide, shownTab, 2, t.selected, cx)).children(rows)));
+          .child(this.glide.el(this.slide, shownTab, 2, SEL, cx)).children(rows)));
   }
 
   // Dock: the block is as tall as its rows, so Working (the agents block) sits right under the
