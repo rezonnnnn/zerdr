@@ -12,7 +12,11 @@ import { Press } from "./press.js";
 
 const ICONS = "mods/workspace-chrome";
 const BRANCH = "mods/zerdr-header/icons/branch.svg";
-const CARD_PX = 56; // a thread card, as zerdr-sidebar's thread row (ROW_PX)
+const CARD_PX = 50; // a thread card, as zerdr-sidebar's thread row (ROW_PX)
+// As zerdr-sidebar (keep in step): titles start at the project name's edge; neutral hover and
+// selection fills, the selection with a 1 px inner ring; hairlines instead of full-bleed dividers.
+const INDENT = 28;
+const HOVER = "#FFFFFF08", SEL = "#FFFFFF0F", RING = "#FFFFFF0A", HAIR = "#FFFFFF0F";
 const SUB_PX = 53; // a sub-agent row: py 6 + two lines
 // The light braille "dots" spinner (2-4 of 6 dots lit): it reads as motion. The 8-dot set with 7 lit
 // read as a drag grip, and any frame with a full column (⠇ ⠸ ⠧ ⠏) reads as a kebab menu at 15 px.
@@ -172,11 +176,12 @@ class Glide {
       .opacity(s === 2 ? 1 : 0)
       .transition("opacity", s === 2 ? { duration: 160, easing: "ease-out" } : s === 3 ? { duration: 600, easing: "ease-in-out" } : 1);
     const hl = div().id("glide-hl").absolute().left(0).w_full().top(s === 1 ? this.top + 4 * this.from : this.top).h(this.h).rounded(8).bg(color)
+      .border(1).border_color(RING)
       .opacity(on && s !== 1 ? 1 : 0)
       .transition("top", spec).transition("height", spec).transition("opacity", fade)
       .when(Boolean(stamp), (el) => el.child(stamp));
     const g = this.ghost;
-    const ghost = g && div().id(`glide-ghost-${this.arrival}`).absolute().left(0).w_full().top(g.top).h(g.h).rounded(8).bg(color)
+    const ghost = g && div().id(`glide-ghost-${this.arrival}`).absolute().left(0).w_full().top(g.top).h(g.h).rounded(8).bg(color).border(1).border_color(RING)
       .opacity(s === 1 ? 1 : 0).transition("opacity", s === 1 ? 1 : { duration: 140, easing: "ease-out" });
     return div().absolute().top(0).left(0).size_full().when(Boolean(ghost), (el) => el.child(ghost)).child(hl);
   }
@@ -289,22 +294,22 @@ export default class ThreadsAgents extends View {
     // A working thread recedes (muted title) unless it is the one shown.
     const busy = ["working", "agents"].includes(r.phase ?? r.status);
     const prog = r.program?.agent ? r.program : null;
-    const glyph = prog?.icon ? (prog.tint ? svg(prog.icon).size(14).text_color(t.dim) : image(prog.icon).size(14)) : null;
-    return this.slide.apply(div().id(`ag-${r.key}`), r.key).relative().flex_none().px(8).h(CARD_PX).rounded(8).cursor_pointer()
-      .flex().flex_col().justify_center().gap(5)
-      .when(!on, (el) => el.hover((s) => s.bg("#FFFFFF08")))
+    const glyph = prog?.icon ? (prog.tint ? svg(prog.icon).size(14).text_color(t.idle) : image(prog.icon).size(14)) : null;
+    return this.slide.apply(div().id(`ag-${r.key}`), r.key).relative().flex_none().pl(INDENT).pr(8).h(CARD_PX).rounded(8).cursor_pointer()
+      .flex().flex_col().justify_center().gap(3)
+      .when(!on, (el) => el.hover((s) => s.bg(HOVER)))
       .tooltip([r.name, `${r.space.machine ?? "This computer"} / ${r.space.name}`, "Focus"].join("\n"))
       .on_click(() => r.click())
       .child(h_flex().items_center().gap(8)
-        .child(div().flex_1().min_w(0).truncate().text_size(14).font_medium().text_color(busy && !on ? t.muted : t.foreground).child(r.name))
+        .child(div().flex_1().min_w(0).truncate().text_size(13).font_medium().text_color(busy && !on ? t.dim : t.foreground).child(r.name))
         .child(div().flex_none().child(this.marker(t, r.phase ?? r.status, r.key))))
       .child(h_flex().h(16).items_center().gap(8)
-        .child(h_flex().flex_1().min_w(0).items_center().gap(5).text_size(12).text_color(t.dim)
-          .when(Boolean(r.branch), (el) => el.child(svg(BRANCH).size(14).flex_none())
+        .child(h_flex().flex_1().min_w(0).items_center().gap(5).text_size(12).text_color(t.idle)
+          .when(Boolean(r.branch), (el) => el.child(svg(BRANCH).size(12).flex_none())
             .child(div().min_w(0).truncate().child(r.branch))))
-        .when(ms > 0, (el) => el.child(div().flex_none().text_size(12).text_color(t.dim).tooltip("Time worked").child(worked)))
+        .when(ms > 0, (el) => el.child(div().flex_none().text_size(12).text_color(t.idle).tooltip("Time worked").child(worked)))
         .when(Boolean(prog), (el) => el.child(div().id(`harness-${r.key}`).flex_none().min_w(16).h(16).flex().items_center().justify_center()
-          .max_w(110).truncate().text_size(12).text_color(t.dim).tooltip(prog.name)
+          .max_w(110).truncate().text_size(12).text_color(t.idle).tooltip(prog.name)
           .child(glyph ?? prog.name))));
   }
 
@@ -317,8 +322,8 @@ export default class ThreadsAgents extends View {
     const tip = [r.depth ? null : r.name, r.where && r.where !== task ? r.where : null, task, r.depth ? "Peek" : "Focus"].filter(Boolean).join("\n");
     // Sub-agents hang off the parent's status column with an elbow connector.
     return this.slide.apply(div().id(`ag-${r.key}`), r.key).relative().flex_none().px(8).py(6).rounded(8).cursor_pointer()
-      .ml(r.depth * 22)
-      .hover((s) => s.bg("#FFFFFF08"))
+      .ml(INDENT - 8 + (r.depth - 1) * 22) // its marker sits on the thread title's edge
+      .hover((s) => s.bg(HOVER))
       .tooltip(tip)
       .on_click(() => r.click())
       .when(r.depth > 0, (el) => el.child(div().absolute().left(-12).top(-6).w(9).h(29)
@@ -331,12 +336,12 @@ export default class ThreadsAgents extends View {
         .child(div().pl(24).min_w(0).truncate().text_size(12).text_color(sub ? t.muted : t.dim).child(sub || "No task")));
   }
 
-  // The one icon-button style: 28px, round, input-coloured ring.
+  // Ghost button, as zerdr-sidebar's: 28 px, bare icon, a fill on hover.
   ibtn(id, icon, tip, onClick) {
     const t = theme();
     this.press ??= new Press();
-    return this.press.wire(div().id(id).size(28).flex_none().flex().items_center().justify_center().rounded_full()
-      .border(1).border_color("#FFFFFF1F").text_color(t.muted).cursor_pointer()
+    return this.press.wire(div().id(id).size(28).flex_none().flex().items_center().justify_center().rounded(7)
+      .text_color(t.dim).cursor_pointer()
       .hover((s) => s.bg("#FFFFFF12").text_color(t.foreground))
       .tooltip(tip)
       .on_click(onClick)
@@ -353,14 +358,17 @@ export default class ThreadsAgents extends View {
     const dot = (color) => div().size(13).flex_none().rounded_full().bg(color + "26").flex().items_center().justify_center()
       .child(div().size(7).rounded_full().bg(color));
     const settings = this.ibtn("threads-settings", "settings", "Settings (Ctrl+,)", () => run("app.settings"));
-    if (narrow()) return h_flex().flex_none().h(48).justify_center().items_center().bg(t.chrome).border_t(1).border_color(t.border).child(settings);
-    // Short labels so status + needs-you + settings fit a 272 px sidebar; the needs-you count shows
-    // only when there is one, and it jumps to that thread.
-    return h_flex().flex_none().px(16).py(12).gap(12).items_center().bg(t.chrome).border_t(1).border_color(t.border)
-      .text_size(12).text_color(t.muted)
-      .child(h_flex().flex_none().gap(6).items_center().tooltip(`${working} ${working === 1 ? "thread" : "threads"} working`).child(dot(t.working)).child(`${working} working`))
-      .when(needs.length > 0, (el) => el.child(h_flex().id("needs-jump").flex_none().gap(6).items_center().text_color(t.blocked).cursor_pointer()
-        .hover((s) => s.underline())
+    const hair = div().absolute().top(0).left(16).right(16).h(1).bg(HAIR);
+    if (narrow()) return h_flex().relative().flex_none().h(48).justify_center().items_center().bg(t.chrome).child(hair).child(settings);
+    // Status as quiet pills (a fill on hover), short so both fit a 272 px sidebar with settings; the
+    // needs-you pill shows only when there is one, and it jumps to that thread.
+    const pill = (el) => el.flex_none().h(28).px(8).gap(7).items_center().rounded(7).font_medium();
+    return h_flex().relative().flex_none().px(8).py(12).gap(2).items_center().bg(t.chrome).child(hair)
+      .text_size(12).text_color(t.dim)
+      .child(pill(h_flex().id("working-count")).hover((s) => s.bg(HOVER).text_color(t.foreground))
+        .tooltip(`${working} ${working === 1 ? "thread" : "threads"} working`).child(dot(t.working)).child(`${working} working`))
+      .when(needs.length > 0, (el) => el.child(pill(h_flex().id("needs-jump")).text_color(t.blocked).cursor_pointer()
+        .hover((s) => s.bg(t.blocked + "14"))
         .tooltip("Go to the thread that needs you")
         .on_click(() => {
           const { space, tab } = needs[0];
@@ -376,13 +384,15 @@ export default class ThreadsAgents extends View {
     const body = out.length
       ? out.map((r) => this.row(t, r))
       : [div().px(8).py(4).text_size(12).text_color(t.dim).child(shared("threads.q") ? "No working threads match." : "No agents working.")];
-    return v_flex().flex_1().min_h(0).px(8).pt(4).pb(6).border_t(1).border_color(t.border)
-      .child(h_flex().flex_none().px(8).pt(10).pb(6).gap(6).items_center().text_size(12).font_semibold().text_color(t.dim)
-        .child(div().flex_1().min_w(0).truncate().child("Working"))
+    // A hairline inset from the edges, then the section header in the threads list's style.
+    return v_flex().relative().flex_1().min_h(0).px(8).pt(4).pb(6)
+      .child(div().absolute().top(0).left(16).right(16).h(1).bg(HAIR))
+      .child(h_flex().flex_none().h(26).mt(6).mb(2).px(8).gap(4).items_center().text_size(12).font_medium().text_color(t.idle)
+        .child(div().min_w(0).truncate().child("Working"))
         .child(div().flex_none().child(String(working))))
       .child(v_flex().id("agents-list").flex_1().min_h(0).overflow_y_scrollbar()
         .child(v_flex().relative().flex_none().w_full()
-          .child(this.glide.el(this.slide, out.find((r) => r.depth === 0 && r.tabId === focused()?.tab)?.key, 0, t.selected, cx))
+          .child(this.glide.el(this.slide, out.find((r) => r.depth === 0 && r.tabId === focused()?.tab)?.key, 0, SEL, cx))
           .children(body)));
   }
 
@@ -390,7 +400,7 @@ export default class ThreadsAgents extends View {
   // Resize only when the clamped size changes, so a resize never re-triggers itself.
   fit(out, listOnly) {
     const rows = out.length ? out.reduce((n, r) => n + (r.depth === 0 ? CARD_PX : SUB_PX), 0) : SUB_PX;
-    const px = Math.min(capPx(), Math.max(listOnly ? 60 : MIN_PX, 41 + rows + 10 + (listOnly ? 0 : 53)));
+    const px = Math.min(capPx(), Math.max(listOnly ? 60 : MIN_PX, 38 + rows + 10 + (listOnly ? 0 : 53)));
     const now = find(layout(), "agents")?.size?.px;
     if (px === this.sized) return;
     this.sized = px;
