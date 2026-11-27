@@ -40,15 +40,16 @@ function find(node, id) {
 }
 const narrow = () => (find(layout(), "sidebar")?.size?.px ?? Infinity) < 160;
 // Sidebar fold: zerdr-viz resizes the sidebar once per toggle, so the terminal reflows once.
-// Shared "sidebar.phase" is leaving (content slides out its full width, 200 ms ease-in) ->
-// arriving (one frame hidden at the new width) -> idle (slides back in, 260 ms ease-out).
+// Shared "sidebar.phase" is leaving (content slides out its full width, 180 ms) -> arriving (one
+// frame hidden at the new width) -> idle (slides back in, 200 ms). Ease-out both ways so it moves on
+// the first frame; no fade, the panel moves as one piece.
 const settle = (el) => {
   const p = shared("sidebar.phase") ?? "idle";
-  const spec = p === "idle" ? { duration: 260, easing: "ease-out" } : p === "leaving" ? { duration: 200, easing: "ease-in" } : 1;
+  const spec = p === "idle" ? { duration: 200, easing: "ease-out" } : p === "leaving" ? { duration: 180, easing: "ease-out" } : 1;
   const off = -(shared("sidebar.width") ?? 272);
   // The offset must sit on a child: Herdr places a mod's root element itself and ignores its left.
   return div().id("settle").size_full().overflow_hidden().child(el.relative().left(p === "idle" ? 0 : off)
-    .opacity(p === "idle" ? 1 : 0).transition("left", spec).transition("opacity", spec));
+    .transition("left", spec));
 };
 
 const clean = (s) => (s ?? "").replace(/^[^\p{L}\p{N}]+/u, "").trim();

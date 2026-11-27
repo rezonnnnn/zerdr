@@ -44,14 +44,14 @@ function find(node, id) {
 }
 const narrow = () => (find(layout(), "sidebar")?.size?.px ?? Infinity) < 160;
 // Sidebar fold: as zerdr-sidebar (keep the two in step). zerdr-viz resizes once per toggle;
-// "sidebar.phase" leaving slides the content out (200 ms ease-in), idle slides it back (260 ms ease-out).
+// "sidebar.phase" leaving slides the content out (180 ms), idle slides it back (200 ms); ease-out, no fade.
 const settle = (el) => {
   const p = shared("sidebar.phase") ?? "idle";
-  const spec = p === "idle" ? { duration: 260, easing: "ease-out" } : p === "leaving" ? { duration: 200, easing: "ease-in" } : 1;
+  const spec = p === "idle" ? { duration: 200, easing: "ease-out" } : p === "leaving" ? { duration: 180, easing: "ease-out" } : 1;
   const off = -(shared("sidebar.width") ?? 272);
   // The offset must sit on a child: Herdr places a mod's root element itself and ignores its left.
   return div().id("settle").size_full().overflow_hidden().child(el.relative().left(p === "idle" ? 0 : off)
-    .opacity(p === "idle" ? 1 : 0).transition("left", spec).transition("opacity", spec));
+    .transition("left", spec));
 };
 
 // A sub-agent's raw word; error counts as needing you, done reports to its parent.
