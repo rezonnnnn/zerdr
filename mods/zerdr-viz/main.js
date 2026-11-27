@@ -18,20 +18,21 @@ function find(node, id) {
 // The rail goes by width, as workspace-chrome's does; same shared keys so both agree.
 const narrow = () => (find(layout(), "sidebar")?.size?.px ?? Infinity) < 160;
 // Sidebar fold: as zerdr-sidebar (keep the copies in step). "sidebar.phase" leaving slides the
-// content out (200 ms ease-in) -> arriving (one frame hidden at the new width) -> idle (slides
-// back in, 260 ms ease-out). Native transitions only.
+// content out (180 ms) -> arriving (one frame hidden at the new width) -> idle (slides back in,
+// 200 ms). Ease-out both ways so it moves on the first frame; no fade, the panel moves as one piece.
+// Native transitions only.
 const settle = (el) => {
   const p = shared("sidebar.phase") ?? "idle";
-  const spec = p === "idle" ? { duration: 260, easing: "ease-out" } : p === "leaving" ? { duration: 200, easing: "ease-in" } : 1;
+  const spec = p === "idle" ? { duration: 200, easing: "ease-out" } : p === "leaving" ? { duration: 180, easing: "ease-out" } : 1;
   const off = -(shared("sidebar.width") ?? 272);
   // The offset must sit on a child: Herdr places a mod's root element itself and ignores its left.
   return div().id("settle").size_full().overflow_hidden().child(el.relative().left(p === "idle" ? 0 : off)
-    .opacity(p === "idle" ? 1 : 0).transition("left", spec).transition("opacity", spec));
+    .transition("left", spec));
 };
 // Collapse/expand: one layout.resize per toggle, so the terminal reflows once. Stepping the width
 // (the old 200 ms slide) resized the terminal ~12 times and the agent in it redrew per step: lag.
-// The motion is the content's (settle(), above): collapse slides out (200 ms), then resizes; expand
-// resizes hidden, then slides in (260 ms). Toggles during the handover are ignored.
+// The motion is the content's (settle(), above): collapse slides out (180 ms), then resizes; expand
+// resizes hidden, then slides in (200 ms). Toggles during the handover are ignored.
 let busy = false;
 function toggleSidebar(cx) {
   if (busy) return;
@@ -47,7 +48,7 @@ function toggleSidebar(cx) {
     run("layout.resize", { id: "sidebar", px: to });
     cx.timer.after(16, () => { setShared("sidebar.phase", "idle"); busy = false; });
   };
-  if (collapsing) { setShared("sidebar.phase", "leaving"); cx.timer.after(200, swap); }
+  if (collapsing) { setShared("sidebar.phase", "leaving"); cx.timer.after(180, swap); }
   else swap(cx);
 }
 
